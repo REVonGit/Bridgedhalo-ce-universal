@@ -21,6 +21,13 @@ Windows they keep SDL and gl.h from bringing in the Windows SDK */
 #ifndef GL_BGRA
 #define GL_BGRA 0x80E1
 #endif
+#ifndef GL_CLIP_ORIGIN
+#define GL_CLIP_ORIGIN     0x935C
+#define GL_CLIP_DEPTH_MODE 0x935D
+#endif
+#ifndef GL_LOWER_LEFT
+#define GL_LOWER_LEFT      0x8CA1
+#endif
 
 typedef void   (GLAPIENTRY *pfn_void_e)(GLenum);
 typedef void   (GLAPIENTRY *pfn_GetIntegerv)(GLenum, GLint*);
@@ -30,6 +37,7 @@ typedef void   (GLAPIENTRY *pfn_ColorMask)(GLboolean, GLboolean, GLboolean, GLbo
 typedef void   (GLAPIENTRY *pfn_BlendFuncSeparate)(GLenum, GLenum, GLenum, GLenum);
 typedef void   (GLAPIENTRY *pfn_BlendEquationSeparate)(GLenum, GLenum);
 typedef void   (GLAPIENTRY *pfn_DrawArrays)(GLenum, GLint, GLsizei);
+typedef void   (GLAPIENTRY *pfn_ClipControl)(GLenum, GLenum);
 typedef GLuint (GLAPIENTRY *pfn_CreateShaderProgramv)(GLenum, GLsizei, const char* const*);
 typedef void   (GLAPIENTRY *pfn_GenProgramPipelines)(GLsizei, GLuint*);
 typedef void   (GLAPIENTRY *pfn_UseProgramStages)(GLuint, GLbitfield, GLuint);
@@ -83,6 +91,7 @@ static struct {
     pfn_PixelStorei PixelStorei;
     pfn_ActiveTexture ActiveTexture;
     pfn_BindTexture BindTexture;
+    pfn_ClipControl ClipControl;
 
     GLuint pipeline, vao, tex;
     GLsizei tex_w, tex_h;
@@ -132,7 +141,7 @@ static int init_gl(void) {
     LOAD(CreateVertexArrays); LOAD(BindVertexArray); LOAD(CreateTextures); LOAD(DeleteTextures);
     LOAD(TextureStorage2D); LOAD(TextureSubImage2D); LOAD(TextureParameteri); LOAD(BindTextureUnit);
     LOAD(BindSampler); LOAD(BindFramebuffer); LOAD(BindBuffer); LOAD(PixelStorei);
-    LOAD(ActiveTexture); LOAD(BindTexture);
+    LOAD(ActiveTexture); LOAD(BindTexture); LOAD(ClipControl);
     if (G.failed) { SDL_Log("[HaloDoomBridge] overlay: missing GL 4.5 entry points"); return 0; }
 
     vs = make_stage(GL_VERTEX_SHADER, k_vs);
@@ -183,7 +192,7 @@ void hdb_overlay_draw(int x, int y, int w, int h) {
     hdb_shared* shm = hdb_bridge_shared();
     GLint prog, pipe, vao, fbo, unpack_buf, unpack_row, unpack_align, active_tex, tex0, sampler0;
     GLint viewport[4], scissor_box[4], blend_src_rgb, blend_dst_rgb, blend_src_a, blend_dst_a;
-    GLint blend_eq_rgb, blend_eq_a;
+    GLint blend_eq_rgb, blend_eq_a, clip_origin, clip_depth;
     GLboolean blend, depth, cull, scissor, stencil, srgb, cmask[4];
 
     hdb_bridge_set_picture_size(w, h);
@@ -210,6 +219,10 @@ void hdb_overlay_draw(int x, int y, int w, int h) {
     G.GetIntegerv(GL_BLEND_DST_ALPHA, &blend_dst_a);
     G.GetIntegerv(GL_BLEND_EQUATION_RGB, &blend_eq_rgb);
     G.GetIntegerv(GL_BLEND_EQUATION_ALPHA, &blend_eq_a);
+    /* Halo's renderer keeps D3D's upper-left clip origin (d3d8_gl.c), which
+    would draw the overlay upside down */
+    G.GetIntegerv(GL_CLIP_ORIGIN, &clip_origin);
+    G.GetIntegerv(GL_CLIP_DEPTH_MODE, &clip_depth);
     {
         GLint m[4];
         G.GetIntegerv(GL_COLOR_WRITEMASK, m);
@@ -241,6 +254,7 @@ void hdb_overlay_draw(int x, int y, int w, int h) {
         G.Disable(GL_STENCIL_TEST);
         G.Disable(GL_FRAMEBUFFER_SRGB);
         G.ColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        G.ClipControl(GL_LOWER_LEFT, (GLenum)clip_depth);
         G.Enable(GL_BLEND);
         G.BlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
         G.BlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
@@ -248,6 +262,7 @@ void hdb_overlay_draw(int x, int y, int w, int h) {
     }
 
     /* --- restore ------------------------------------------------- */
+    G.ClipControl((GLenum)clip_origin, (GLenum)clip_depth);
     G.BindTextureUnit(0, (GLuint)tex0);
     G.BindSampler(0, (GLuint)sampler0);
     G.ActiveTexture((GLenum)active_tex);
