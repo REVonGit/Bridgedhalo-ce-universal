@@ -145,6 +145,10 @@ int hdb_os_launch_doom(const hdb_config* cfg, uint32_t view_w, uint32_t view_h) 
     }
     argv[n] = NULL;
 
+    if (access(cfg->uzdoom_exe, X_OK) != 0) {
+        hdb_os_log("sUZDoom not found: %s", cfg->uzdoom_exe);
+        return 0;
+    }
     pid = fork();
     if (pid < 0) { hdb_os_log("fork failed: %s", strerror(errno)); return 0; }
     if (pid == 0) {
@@ -165,6 +169,14 @@ void hdb_os_kill_doom(void) {
         waitpid(g_doom, NULL, WNOHANG);
         g_doom = 0;
     }
+}
+
+int hdb_os_doom_exited(long* exit_code) {
+    int status;
+    if (g_doom <= 0 || waitpid(g_doom, &status, WNOHANG) != g_doom) return 0;
+    *exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -WTERMSIG(status);
+    g_doom = 0;
+    return 1;
 }
 
 uint32_t hdb_os_pid(void) { return (uint32_t)getpid(); }

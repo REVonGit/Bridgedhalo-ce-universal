@@ -15,6 +15,7 @@ the Windows SDK only; it replaces posix_hdbridge.c (port.json).
 
 static HANDLE g_map = NULL;
 static HANDLE g_job = NULL;
+static HANDLE g_proc = NULL;
 static char   g_exe_dir[HDB_PATH_MAX];
 
 static const char* exe_dir(void) {
@@ -117,20 +118,49 @@ int hdb_os_launch_doom(const hdb_config* cfg, uint32_t view_w, uint32_t view_h) 
     ZeroMemory(&si, sizeof si);
     si.cb = sizeof si;
     ZeroMemory(&pi, sizeof pi);
+    /* every file it needs, named in the log if missing (the usual problem) */
+    {
+        const char* names[5] = { "sUZDoom", "sIWAD", "sHaloDoom", "sBridgePk3", NULL };
+        const char* paths[5] = { cfg->uzdoom_exe, cfg->iwad, cfg->halodoom_pk3, cfg->bridge_pk3, NULL };
+        int i, missing = 0;
+        for (i = 0; names[i]; i++) {
+            if (GetFileAttributesA(paths[i]) == INVALID_FILE_ATTRIBUTES) {
+                hdb_os_log("%s not found: %s", names[i], paths[i]);
+                missing = 1;
+            }
+        }
+        if (missing) {
+            hdb_os_log("UZDoom not started: fix the paths above in hdbridge.ini "
+                       "(relative paths start from %s)", exe_dir());
+            return 0;
+        }
+    }
+    hdb_os_log("starting: %s", cmd);
     if (!CreateProcessA(NULL, cmd, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, exe_dir(), &si, &pi)) {
-        hdb_os_log("could not start UZDoom (%lu): check sUZDoom in hdbridge.ini", GetLastError());
+        hdb_os_log("could not start UZDoom (error %lu): %s", GetLastError(), cfg->uzdoom_exe);
         return 0;
     }
     if (g_job) AssignProcessToJobObject(g_job, pi.hProcess);
     ResumeThread(pi.hThread);
     CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
+    g_proc = pi.hProcess;
     hdb_os_log("started UZDoom (pid %lu)", pi.dwProcessId);
     return 1;
 }
 
 void hdb_os_kill_doom(void) {
     if (g_job) { CloseHandle(g_job); g_job = NULL; }   /* KILL_ON_JOB_CLOSE */
+    if (g_proc) { CloseHandle(g_proc); g_proc = NULL; }
+}
+
+int hdb_os_doom_exited(long* exit_code) {
+    DWORD code;
+    if (!g_proc || WaitForSingleObject(g_proc, 0) != WAIT_OBJECT_0) return 0;
+    if (!GetExitCodeProcess(g_proc, &code)) code = 0;
+    *exit_code = (long)code;
+    CloseHandle(g_proc);
+    g_proc = NULL;
+    return 1;
 }
 
 uint32_t hdb_os_pid(void) { return (uint32_t)GetCurrentProcessId(); }

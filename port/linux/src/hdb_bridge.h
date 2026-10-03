@@ -53,6 +53,7 @@ void hdb_os_unmap_shared(hdb_shared *shared);
 int hdb_os_process_alive(uint32_t pid);
 int hdb_os_launch_doom(hdb_config const *config, uint32_t view_width, uint32_t view_height);
 void hdb_os_kill_doom(void);
+int hdb_os_doom_exited(long *exit_code);           /* 1 once the UZDoom it started has quit */
 uint32_t hdb_os_pid(void);
 uint64_t hdb_os_ms(void);
 void hdb_os_log(char const *format, ...);

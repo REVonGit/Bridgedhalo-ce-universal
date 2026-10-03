@@ -69,6 +69,7 @@ static struct
 	uint32_t picture_width, picture_height;
 	int have_picture;
 	int launch_pending;
+	int doom_seen;   /* 0 nothing yet, 1 talking, 2 ready: for the log */
 	uint64_t init_ms;
 
 	volatile long input_lock;
@@ -437,6 +438,22 @@ void hdb_bridge_frame(void)
 	maybe_launch_doom();
 
 	doom_up = doom_alive() && (B.shared->doom.flags & HDB_DS_READY);
+	{
+		/* what UZDoom is doing, for hdbridge.log */
+		int seen = doom_up ? 2 : doom_alive() ? 1 : 0;
+		long code;
+
+		if (seen != B.doom_seen)
+		{
+			if (seen == 2) hdb_os_log("UZDoom ready");
+			else if (seen == 1) hdb_os_log(B.doom_seen ? "UZDoom no longer ready" : "UZDoom connected");
+			else hdb_os_log("UZDoom stopped responding");
+			B.doom_seen = seen;
+		}
+		if ((B.frame & 31) == 0 && hdb_os_doom_exited(&code))
+			hdb_os_log("UZDoom quit (exit code %ld%s)", code,
+				(unsigned long)code == 0xC0000005UL ? ": a crash, see its crash report" : "");
+	}
 	B.in_game = hdb_game_in_progress();
 	B.player = B.in_game ? hdb_game_player_unit() : -1;
 	if (B.player == -1)
