@@ -72,6 +72,9 @@ static struct
 	int launch_pending;
 	int doom_seen;   /* 0 nothing yet, 1 talking, 2 ready: for the log */
 	int doom_menu;        /* UZDoom's menu or console is open while it drives */
+	float sent_shields, sent_body;   /* the player's vitality as Doom last heard it (-1: resend) */
+	int player_was_dead;
+	char loadout_map[64];            /* the level whose starting loadout Doom has */
 	int paused_for_doom;  /* we stopped Halo's clock for it */
 	uint64_t init_ms;
 
@@ -289,6 +292,7 @@ static void set_driving(int on)
 	if (on == B.driving)
 		return;
 	B.driving = on;
+	B.sent_shields = B.sent_body = -1.f;
 	hdb_game_set_fp_weapon_and_hud_visible(!on);
 	if (!on)
 	{
@@ -564,6 +568,76 @@ static long effect_for(uint32_t damage_type)
 	return B.default_damage_effect;
 }
 
+/* The player's unit as Halo Doom shows it: shields and health (Halo's), its
+death, and at a level's start what it carries */
+static void send_loadout(void)
+{
+	hdb_carried_weapon weapons[4];
+	int grenades[2], count, i;
+	static char const *const grenade_tags[2] =
+	{
+		"weapons\\frag grenade\\frag grenade",
+		"weapons\\plasma grenade\\plasma grenade",
+	};
+
+	count = hdb_game_player_loadout(weapons, 4, grenades);
+	push_halo_event(HDB_EV_LOADOUT_BEGIN, 0.f, 0, NULL);
+	for (i = 0; i < count; i++)
+	{
+		hdb_vec3 extra;
+
+		extra.x = (float)weapons[i].loaded;
+		extra.y = weapons[i].charge;
+		extra.z = weapons[i].in_hand ? 1.f : 0.f;
+		push_halo_event(HDB_EV_LOADOUT_ITEM, (float)weapons[i].reserve, (uint32_t)weapons[i].kind_hash, &extra);
+	}
+	for (i = 0; i < 2; i++)
+	{
+		if (grenades[i] > 0)
+			push_halo_event(HDB_EV_LOADOUT_ITEM, (float)grenades[i], hdb_fnv1a_lower(grenade_tags[i]), NULL);
+	}
+	push_halo_event(HDB_EV_LOADOUT_END, 0.f, 0, NULL);
+	hdb_os_log("%s: Doom starts with the player's %d weapons, %d frag and %d plasma grenades",
+		B.last_map, count, grenades[0], grenades[1]);
+}
+
+static void sync_player(void)
+{
+	float shields, body;
+	int dead;
+
+	if (B.doom_seen != 2 || !B.in_game)
+		return;
+	dead = hdb_game_player_dead();
+	if (dead && !B.player_was_dead)
+	{
+		hdb_os_log("the player died in Halo: so does Doom's");
+		push_halo_event(HDB_EV_PLAYER_KILLED, 0.f, 0, NULL);
+	}
+	B.player_was_dead = dead;
+	if (!B.driving)
+		return;
+
+	if (hdb_game_player_vitality(&shields, &body) &&
+		(fabsf(shields - B.sent_shields) > 0.002f || fabsf(body - B.sent_body) > 0.002f))
+	{
+		hdb_vec3 v;
+
+		v.x = shields;
+		v.y = body;
+		v.z = 0.f;
+		push_halo_event(HDB_EV_PLAYER_VITALITY, 0.f, 0, &v);
+		B.sent_shields = shields;
+		B.sent_body = body;
+	}
+
+	if (strcmp(B.loadout_map, B.last_map) != 0)
+	{
+		send_loadout();
+		strncpy(B.loadout_map, B.last_map, sizeof(B.loadout_map) - 1);
+	}
+}
+
 void hdb_bridge_tick(void)
 {
 	hdb_move move;
@@ -635,6 +709,8 @@ void hdb_bridge_tick(void)
 			B.hits_dealt++;
 		}
 	}
+
+	sync_player();
 
 	if (B.tick % 300 == 0 && (B.hits_dealt || B.hits_walled || B.hits_lost))
 	{
@@ -738,28 +814,21 @@ int hdb_bridge_no_falling_damage(long biped_index)
 int hdb_bridge_player_damaged(long victim_index, float amount, float const source[3], long damage_effect_index,
 	int kill_instantly)
 {
+	/* Halo deals all damage to the player's unit, by its own rules (the
+	weapon's shield and body multipliers, materials, head shots, shield leak
+	and the difficulty); Halo Doom shows the result (the vitality, every
+	tick) and gets each hit for its effects: shield sounds, the flash, which
+	way it came from. Its death follows the unit's. */
 	hdb_vec3 from;
 
-	if (!B.ready || !B.driving || B.killing || victim_index != B.player || victim_index == -1)
+	(void)kill_instantly;
+	if (!B.ready || !B.driving || victim_index != B.player || victim_index == -1)
 		return 0;
-	if (kill_instantly)
-	{
-		/* a death Halo decides: a fall out of the level, a script, or the
-		bridge's own when the Doom player died (dealt a moment later, so
-		B.killing no longer covers it). It happens in Halo, which then
-		reverts as usual; the Doom player dies with it. */
-		hdb_os_log("the player is killed outright (%s): Doom's dies too", hdb_game_tag_name(damage_effect_index));
-		push_halo_event(HDB_EV_PLAYER_KILLED, 0.f, 0, NULL);
-		return 0;
-	}
 	from.x = source[0];
 	from.y = source[1];
 	from.z = source[2];
-	push_halo_event(HDB_EV_PLAYER_DAMAGED, amount * B.config.incoming_damage_scale, (uint32_t)damage_effect_index, &from);
-	if (amount * B.config.incoming_damage_scale >= 40.f)
-		hdb_os_log("heavy damage to the player: %.0f from %s", amount * B.config.incoming_damage_scale,
-			hdb_game_tag_name(damage_effect_index));
-	return 1;
+	push_halo_event(HDB_EV_PLAYER_DAMAGED, amount, (uint32_t)damage_effect_index, &from);
+	return 0;
 }
 
 void hdb_bridge_checkpoint_saved(void)

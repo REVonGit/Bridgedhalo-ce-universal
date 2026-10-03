@@ -312,6 +312,10 @@ extern int hdb_bridge_pickups_are_dooms(void);
 #else
 #define players_decide_pickups() (!network_game_distributed_client())
 #endif
+/* powerups (health pack, overshield, camouflage) stay Halo's even while Doom
+drives: Halo keeps the player's shields and health (the bridge shows them in
+Halo Doom), and its camouflage is what hides the player from the AI */
+#define players_decide_powerup_pickups() (!network_game_distributed_client())
 
 /* ---------- constants */
 
@@ -1800,7 +1804,7 @@ static boolean player_handle_action(
 		/* port: a distributed client's inventories are the host's (the
 		powerup is swapped where the host decides pickups, and the relayed
 		action of a remote player reaches here too): it swaps nothing */
-		if (!players_decide_pickups())
+		if (!players_decide_powerup_pickups())
 		{
 			result = TRUE;
 			break;
@@ -3135,7 +3139,7 @@ static void player_examine_nearby_item(
 			current_equipment_index = unit_get_current_equipment(player->unit_index);
 			if (current_equipment_index == NONE)
 			{
-				if (players_decide_pickups())
+				if (players_decide_powerup_pickups())
 					player_handle_powerup_equipment(player_index, item_index);
 			}
 			else

@@ -182,6 +182,45 @@ int hdb_game_player_in_water(void)
 	return FALSE;
 }
 
+int hdb_game_player_vitality(float *shields, float *body)
+{
+	struct unit_datum *unit = player_unit_datum();
+
+	if (!unit)
+		return FALSE;
+	*shields = unit->object.shield_vitality;
+	*body = unit->object.body_vitality;
+	return TRUE;
+}
+
+int hdb_game_player_loadout(hdb_carried_weapon *weapons, int max, int grenades[2])
+{
+	struct unit_datum *unit = player_unit_datum();
+	int count = 0;
+	short i;
+
+	grenades[0] = grenades[1] = 0;
+	if (!unit)
+		return 0;
+	for (i = 0; i < MAXIMUM_WEAPONS_PER_UNIT && count < max; i++)
+	{
+		struct weapon_datum *weapon = weapon_try_and_get(unit->unit.weapon_object_indices[i]);
+		hdb_carried_weapon *w;
+
+		if (!weapon)
+			continue;
+		w = &weapons[count++];
+		w->kind_hash = hash_lower(tag_get_name(weapon->definition_index));
+		w->reserve = weapon->weapon.magazines[0].rounds_total;
+		w->loaded = weapon->weapon.magazines[0].rounds_loaded;
+		w->charge = 1.f - weapon->weapon.age;
+		w->in_hand = i == unit->unit.current_weapon_index;
+	}
+	grenades[0] = unit->unit.grenade_counts[0];
+	grenades[1] = unit->unit.grenade_counts[1];
+	return count;
+}
+
 int hdb_game_get_unit(long handle, hdb_unit_info *info)
 {
 	struct unit_datum *unit = (struct unit_datum *)object_try_and_get_and_verify_type(handle, _object_mask_unit);
@@ -275,7 +314,7 @@ int hdb_game_get_item(long handle, hdb_item_info *info)
 	if (weapon)
 	{
 		/* the magazine's rounds, or a plasma weapon's charge */
-		short rounds = weapon->weapon.magazines[0].rounds_total;
+		short rounds = weapon->weapon.magazines[0].rounds_total + weapon->weapon.magazines[0].rounds_loaded;
 
 		info->is_weapon = TRUE;
 		info->count = rounds > 0 ? (float)rounds : (1.f - weapon->weapon.age) * 100.f;

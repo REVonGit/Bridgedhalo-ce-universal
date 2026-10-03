@@ -43,6 +43,15 @@ typedef struct
 	int is_weapon;
 } hdb_item_info;
 
+/* a weapon the player's unit carries */
+typedef struct
+{
+	unsigned long kind_hash;  /* FNV-1a of the lower-cased tag path */
+	int reserve, loaded;      /* rounds */
+	float charge;             /* an energy weapon's battery, 0..1 */
+	int in_hand;
+} hdb_carried_weapon;
+
 typedef void (*hdb_unit_fn)(long handle, void *context);
 
 /* game state */
@@ -62,6 +71,9 @@ int hdb_game_player_in_vehicle(void);
 int hdb_game_player_dead(void);
 int hdb_game_player_grounded(void);
 int hdb_game_player_in_water(void);
+int hdb_game_player_vitality(float *shields, float *body);   /* fractions; 0 if no unit */
+/* the unit's weapons (up to max) and grenades (frag, plasma): how many weapons */
+int hdb_game_player_loadout(hdb_carried_weapon *weapons, int max, int grenades[2]);
 int hdb_game_get_unit(long handle, hdb_unit_info *info);
 void hdb_game_for_each_unit(hdb_unit_fn fn, void *context);
 int hdb_game_get_item(long handle, hdb_item_info *info);   /* 0 if gone or carried */
