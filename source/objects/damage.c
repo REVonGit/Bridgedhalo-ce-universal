@@ -1420,13 +1420,15 @@ void object_cause_damage(
 	/* the HaloDoom bridge: Halo Doom owns the player's shields and health,
 	so damage to the player's unit goes to Doom instead */
 	{
-		extern int hdb_bridge_player_damaged(long victim_index, float amount, float const source[3], long damage_effect_index);
+		extern int hdb_bridge_player_damaged(long victim_index, float amount, float const source[3], long damage_effect_index,
+			int kill_instantly);
 		float source[3];
 
 		source[0] = damage->origin.x;
 		source[1] = damage->origin.y;
 		source[2] = damage->origin.z;
-		if (hdb_bridge_player_damaged(object_index, total_damage, source, damage->definition_index))
+		if (hdb_bridge_player_damaged(object_index, total_damage, source, damage->definition_index,
+			TEST_FLAG(damage->flags, _damage_kill_instantly_bit)))
 			return;
 	}
 #endif

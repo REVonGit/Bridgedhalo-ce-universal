@@ -23,6 +23,7 @@ Campaign only: the bridge stays out of multiplayer games.
 #include "objects/damage_effect_definitions.h"
 #include "units/units.h"
 #include "units/bipeds.h"
+#include "units/biped_definitions.h"
 #include "physics/collisions.h"
 #include "scenario/scenario.h"
 #include "structures/structure_bsp_definitions.h"
@@ -202,12 +203,32 @@ int hdb_game_get_unit(long handle, hdb_unit_info *info)
 	}
 	else
 	{
-		real_point3d base;
-		real height, width;
+		/* the biped's collision height, standing to crouched, from its
+		feet (its origin) up. Not biped_get_physics_pill: that gives the
+		pill's straight part for players only, and no height at all for
+		AI, which made every enemy's proxy too flat to hit. */
+		struct biped_datum *biped = (struct biped_datum *)object_try_and_get_and_verify_type(handle, _object_mask_biped);
 
-		biped_get_physics_pill(handle, &base, &height, &width);
-		info->radius = width;
-		info->height = height;
+		if (biped)
+		{
+			struct biped_definition *definition = biped_definition_get(biped->definition_index);
+			real standing = definition->biped.collision_height_standing;
+			real crouching = definition->biped.collision_height_crouching;
+
+			info->radius = definition->biped.collision_radius;
+			info->height = standing + (crouching - standing) * biped->biped.crouch;
+			if (info->height < 2.f * info->radius)
+				info->height = 2.f * info->radius;
+			if (TEST_FLAG(definition->biped.flags, _biped_pill_centered_at_origin_bit))
+				info->pos.z -= info->height * 0.5f;
+		}
+		else
+		{
+			/* any other unit: its bounding sphere, as a vehicle */
+			info->radius = object->bounding_sphere_radius;
+			info->height = 2.f * object->bounding_sphere_radius;
+			info->pos.z = object->bounding_sphere_center.z - object->bounding_sphere_radius;
+		}
 	}
 	return TRUE;
 }

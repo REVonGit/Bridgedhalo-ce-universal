@@ -144,9 +144,9 @@ int hdb_os_launch_doom(const hdb_config* cfg, uint32_t view_w, uint32_t view_h) 
     if (view_h > HDB_OVERLAY_MAX_H) view_h = HDB_OVERLAY_MAX_H;
     snprintf(cmd, sizeof cmd,
         "\"%s\" %s -config \"%s\" -iwad \"%s\" -file \"%s\" \"%s\" -width %u -height %u "
-        "+vid_fullscreen 0 +map HDBVOID %s",
+        "+vid_fullscreen 0 +logfile \"%s\\uzdoom.log\" +map HDBVOID %s",
         cfg->uzdoom_exe, cfg->doom_visible ? "-hdbridge -hdbridge-visible" : "-hdbridge",
-        cfg->doom_config, cfg->iwad, cfg->halodoom_pk3, cfg->bridge_pk3, view_w, view_h, cfg->extra_args);
+        cfg->doom_config, cfg->iwad, cfg->halodoom_pk3, cfg->bridge_pk3, view_w, view_h, exe_dir(), cfg->extra_args);
 
     /* Tie UZDoom's lifetime to Halo's. */
     g_job = CreateJobObjectA(NULL, NULL);

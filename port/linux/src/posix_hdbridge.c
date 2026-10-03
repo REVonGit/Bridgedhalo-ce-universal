@@ -135,6 +135,11 @@ int hdb_os_launch_doom(const hdb_config* cfg, uint32_t view_w, uint32_t view_h) 
     argv[n++] = "-width";  argv[n++] = w;
     argv[n++] = "-height"; argv[n++] = h;
     argv[n++] = "+vid_fullscreen"; argv[n++] = "0";
+    {   /* UZDoom's log beside hdbridge.log */
+        static char log_path[HDB_PATH_MAX];
+        snprintf(log_path, sizeof log_path, "%s/uzdoom.log", exe_dir());
+        argv[n++] = "+logfile"; argv[n++] = log_path;
+    }
     argv[n++] = "+map";    argv[n++] = "HDBVOID";
     /* sExtraArgs: split on spaces (no quoting; use paths without spaces). */
     {

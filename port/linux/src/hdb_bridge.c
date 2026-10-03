@@ -62,6 +62,7 @@ static struct
 
 	hdb_vec3 motion;    /* this tick's Doom displacement, world units */
 	int have_motion;
+	int hits_dealt, hits_walled, hits_lost;   /* Doom's hits, for the log every 10 s */
 	int starved;
 	float yaw, pitch;
 	int crouch;
@@ -550,7 +551,10 @@ void hdb_bridge_tick(void)
 		if (!B.driving || damage.target_id == HDB_NONE)
 			continue;
 		if (!hdb_game_get_unit((long)damage.target_id, &target) || !target.alive)
+		{
+			B.hits_lost++;
 			continue;
+		}
 		if (damage.flags & HDB_DF_NEEDS_LOS)
 		{
 			/* Doom's void has no walls: Halo's structure between the shot
@@ -560,14 +564,25 @@ void hdb_bridge_tick(void)
 
 			middle.z += target.height * 0.5f;
 			if (hdb_game_ray_test(&from, &middle, 0, B.player, &hit) && hit.hit)
+			{
+				B.hits_walled++;
 				continue;
+			}
 		}
 		{
 			hdb_game_vec3 origin = to_game_vec3(damage.origin), direction = to_game_vec3(damage.dir);
 
 			hdb_game_damage_object((long)damage.target_id, damage.amount * B.config.outgoing_damage_scale,
 				effect_for(damage.dtype_hash), &origin, &direction);
+			B.hits_dealt++;
 		}
+	}
+
+	if (B.tick % 300 == 0 && (B.hits_dealt || B.hits_walled || B.hits_lost))
+	{
+		hdb_os_log("Doom's hits, last 10 s: %d dealt, %d stopped by walls, %d on units already gone",
+			B.hits_dealt, B.hits_walled, B.hits_lost);
+		B.hits_dealt = B.hits_walled = B.hits_lost = 0;
 	}
 
 	for (;;)
@@ -649,12 +664,23 @@ int hdb_bridge_no_falling_damage(long biped_index)
 	return B.ready && B.driving && biped_index == B.player && biped_index != -1;
 }
 
-int hdb_bridge_player_damaged(long victim_index, float amount, float const source[3], long damage_effect_index)
+int hdb_bridge_player_damaged(long victim_index, float amount, float const source[3], long damage_effect_index,
+	int kill_instantly)
 {
 	hdb_vec3 from;
 
 	if (!B.ready || !B.driving || B.killing || victim_index != B.player || victim_index == -1)
 		return 0;
+	if (kill_instantly)
+	{
+		/* a death Halo decides: a fall out of the level, a script, or the
+		bridge's own when the Doom player died (dealt a moment later, so
+		B.killing no longer covers it). It happens in Halo, which then
+		reverts as usual; the Doom player dies with it. */
+		hdb_os_log("the player is killed outright (%s): Doom's dies too", hdb_game_tag_name(damage_effect_index));
+		push_halo_event(HDB_EV_PLAYER_KILLED, 0.f, 0, NULL);
+		return 0;
+	}
 	from.x = source[0];
 	from.y = source[1];
 	from.z = source[2];

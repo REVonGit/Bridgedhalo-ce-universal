@@ -48,7 +48,8 @@ int hdb_bridge_no_falling_damage(long biped_index);
 /* damage.c, object_cause_damage: returns 1 when the victim is the player's
 unit and the damage went to Doom instead (Doom owns the player's shields
 and health) */
-int hdb_bridge_player_damaged(long victim_index, float amount, float const source[3], long damage_effect_index);
+int hdb_bridge_player_damaged(long victim_index, float amount, float const source[3], long damage_effect_index,
+	int kill_instantly);
 
 /* game_save / game_revert */
 void hdb_bridge_checkpoint_saved(void);
