@@ -40,7 +40,10 @@ int hdb_bridge_aim_override(float *yaw, float *pitch, int *crouch, float *forwar
 /* bipeds.c, biped_update_physics: when it returns 1 for this biped, its
 velocity this tick is velocity[3] (world units per tick); collision is
 still Halo's */
-int hdb_bridge_motion_override(long biped_index, float velocity[3], float halo_gravity);
+int hdb_bridge_motion_override(long biped_index, float velocity[3]);
+/* units/bipeds.c, landing: nonzero for the biped Doom drives (Halo Doom has
+no falling damage) */
+int hdb_bridge_no_falling_damage(long biped_index);
 
 /* damage.c, object_cause_damage: returns 1 when the victim is the player's
 unit and the damage went to Doom instead (Doom owns the player's shields

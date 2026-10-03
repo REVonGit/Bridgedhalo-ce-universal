@@ -62,7 +62,6 @@ static struct
 
 	hdb_vec3 motion;    /* this tick's Doom displacement, world units */
 	int have_motion;
-	int motion_tics;     /* Doom tics in it: one, sometimes two */
 	int starved;
 	float yaw, pitch;
 	int crouch;
@@ -533,7 +532,6 @@ void hdb_bridge_tick(void)
 	if (count)
 	{
 		B.motion = sum;
-		B.motion_tics = count;
 		B.have_motion = 1;
 		B.starved = 0;
 	}
@@ -634,29 +632,21 @@ int hdb_bridge_aim_override(float *yaw, float *pitch, int *crouch, float *forwar
 	return 1;
 }
 
-int hdb_bridge_motion_override(long biped_index, float velocity[3], float halo_gravity)
+int hdb_bridge_motion_override(long biped_index, float velocity[3])
 {
-	/* Doom's gravity at its default (a Doom unit per tic, per tic), in world
-	units per Halo tick per tick */
-	const float doom_tics_per_tick = 35.f / 30.f;
-	float doom_gravity, vertical;
-
 	if (!B.ready || !B.driving || !B.have_motion || biped_index != B.player || biped_index == -1)
 		return 0;
 	velocity[0] = B.motion.x;
 	velocity[1] = B.motion.y;
-
-	/* Up and down: Doom's rate for one tic (two tics' worth would make one
-	jump twice another), and in Halo's gravity rather than Doom's, several
-	times stronger: the biped falls by Halo's own physics (bipeds.c), and a
-	jump keeps the height it has in Doom. With Doom's gravity, a step off a
-	ledge landed hard enough for Halo's falling damage to kill. */
-	vertical = B.motion.z / (float)(B.motion_tics > 0 ? B.motion_tics : 1) * doom_tics_per_tick;
-	doom_gravity = doom_tics_per_tick * doom_tics_per_tick / (B.config.doom_units_per_wu > 0.f ? B.config.doom_units_per_wu : 80.f);
-	if (halo_gravity > 0.f)
-		vertical *= sqrtf(halo_gravity / doom_gravity);
-	velocity[2] = vertical;
+	velocity[2] = B.motion.z;
 	return 1;
+}
+
+int hdb_bridge_no_falling_damage(long biped_index)
+{
+	/* Halo Doom has no falling damage: a landing hurts nobody Doom drives
+	(falling out of the level still kills, by its own damage) */
+	return B.ready && B.driving && biped_index == B.player && biped_index != -1;
 }
 
 int hdb_bridge_player_damaged(long victim_index, float amount, float const source[3], long damage_effect_index)

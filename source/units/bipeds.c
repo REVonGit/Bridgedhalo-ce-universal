@@ -790,6 +790,15 @@ static void biped_falling_damage(
 		TEST_FLAG(definition->biped.flags, _biped_immune_to_falling_damage_bit);
 	real falling_velocity = biped->object.translational_velocity.k;
 
+#ifndef HALO_ANDROID /* the HaloDoom bridge (port/linux/include/hdb_hooks.h) */
+	{
+		extern int hdb_bridge_no_falling_damage(long biped_index);
+
+		if (hdb_bridge_no_falling_damage(biped_index))
+			immune = TRUE;
+	}
+#endif
+
 	if (!cheat.jetpack || biped->unit.player_index == NONE)
 	{
 		if (collision_velocity > falling_damage->runtime_minimum_damage_velocity)
@@ -2560,17 +2569,14 @@ static void biped_update_physics(
 	/* the HaloDoom bridge: the player's biped moves as Halo Doom moved its
 	player this tick, against Halo's collision (port/linux/src/hdb_bridge.c) */
 	{
-		extern int hdb_bridge_motion_override(long biped_index, float velocity[3], float halo_gravity);
+		extern int hdb_bridge_motion_override(long biped_index, float velocity[3]);
 		float doom_velocity[3];
 
-		if (hdb_bridge_motion_override(physics->biped_index, doom_velocity, global_gravity))
+		if (hdb_bridge_motion_override(physics->biped_index, doom_velocity))
 		{
 			physics->new_velocity.i = doom_velocity[0];
 			physics->new_velocity.j = doom_velocity[1];
-			/* in the air the biped falls as Halo's own do, and lands as
-			softly: Doom only sets off its jumps */
-			physics->new_velocity.k = TEST_FLAG(in_flags, _biped_physics_in_airborne_bit) ?
-				physics->velocity.k - global_gravity : doom_velocity[2];
+			physics->new_velocity.k = doom_velocity[2];
 			/* on the ground and not jumping: follow the slope and keep
 			pressed to it, as Halo's own ground movement does */
 			if (!TEST_FLAG(in_flags, _biped_physics_in_airborne_bit) &&
