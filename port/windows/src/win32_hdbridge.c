@@ -53,16 +53,58 @@ void hdb_os_log(const char* fmt, ...) {
     if (f) { fprintf(f, "%s\n", msg); fclose(f); }
 }
 
+static int file_exists(const char* path) {
+    DWORD a = GetFileAttributesA(path);
+    return a != INVALID_FILE_ATTRIBUTES;
+}
+
+/* A path in hdbridge.ini that names nothing: try the usual places for that
+file, by its own name, before giving up (UZDoom unpacked straight into
+HaloDoomBridge, or into HaloDoomBridge\uzdoom, or next to halo.exe). */
+static void find_elsewhere(const char* setting, char* path, size_t n) {
+    static const char* const folders[] = { "HaloDoomBridge", "HaloDoomBridge\\uzdoom", "", "uzdoom" };
+    const char* name;
+    char tried[HDB_PATH_MAX];
+    int i;
+    if (!path[0] || file_exists(path)) return;
+    name = strrchr(path, '\\');
+    if (!name) name = strrchr(path, '/');
+    name = name ? name + 1 : path;
+    for (i = 0; i < (int)(sizeof folders / sizeof folders[0]); i++) {
+        if (folders[i][0]) snprintf(tried, sizeof tried, "%s\\%s\\%s", exe_dir(), folders[i], name);
+        else snprintf(tried, sizeof tried, "%s\\%s", exe_dir(), name);
+        if (file_exists(tried)) {
+            hdb_os_log("%s not at %s; found it at %s", setting, path, tried);
+            hdb_ini_copy(path, n, tried);
+            return;
+        }
+    }
+}
+
 int hdb_os_load_config(hdb_config* cfg) {
     char path[HDB_PATH_MAX];
+    int read;
     hdb_config_defaults(cfg);
     snprintf(path, sizeof path, "%s\\hdbridge.ini", exe_dir());
-    if (!hdb_config_read(cfg, path)) return 0;
+    read = hdb_config_read(cfg, path);
+    if (read == 0) return 0;   /* no hdbridge.ini: the bridge stays off */
+    hdb_os_log("--- settings from %s", path);
+    if (read < 0)
+        hdb_os_log("hdbridge.ini is saved as UTF-16 (\"Unicode\"), which can't be read: "
+                   "save it again as UTF-8 or ANSI. Using the default settings.");
     resolve(cfg->uzdoom_exe, sizeof cfg->uzdoom_exe);
     resolve(cfg->iwad, sizeof cfg->iwad);
     resolve(cfg->halodoom_pk3, sizeof cfg->halodoom_pk3);
     resolve(cfg->bridge_pk3, sizeof cfg->bridge_pk3);
     resolve(cfg->doom_config, sizeof cfg->doom_config);
+    find_elsewhere("sUZDoom", cfg->uzdoom_exe, sizeof cfg->uzdoom_exe);
+    find_elsewhere("sIWAD", cfg->iwad, sizeof cfg->iwad);
+    find_elsewhere("sHaloDoom", cfg->halodoom_pk3, sizeof cfg->halodoom_pk3);
+    find_elsewhere("sBridgePk3", cfg->bridge_pk3, sizeof cfg->bridge_pk3);
+    hdb_os_log("sUZDoom    = %s", cfg->uzdoom_exe);
+    hdb_os_log("sIWAD      = %s", cfg->iwad);
+    hdb_os_log("sHaloDoom  = %s", cfg->halodoom_pk3);
+    hdb_os_log("sBridgePk3 = %s", cfg->bridge_pk3);
     return 1;
 }
 
@@ -124,7 +166,7 @@ int hdb_os_launch_doom(const hdb_config* cfg, uint32_t view_w, uint32_t view_h) 
         const char* paths[5] = { cfg->uzdoom_exe, cfg->iwad, cfg->halodoom_pk3, cfg->bridge_pk3, NULL };
         int i, missing = 0;
         for (i = 0; names[i]; i++) {
-            if (GetFileAttributesA(paths[i]) == INVALID_FILE_ATTRIBUTES) {
+            if (!file_exists(paths[i])) {
                 hdb_os_log("%s not found: %s", names[i], paths[i]);
                 missing = 1;
             }

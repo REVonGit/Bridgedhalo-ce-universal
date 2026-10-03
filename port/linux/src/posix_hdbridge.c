@@ -80,7 +80,7 @@ int hdb_os_load_config(hdb_config* cfg) {
     char path[HDB_PATH_MAX];
     hdb_config_defaults(cfg);
     snprintf(path, sizeof path, "%s/hdbridge.ini", exe_dir());
-    if (!hdb_config_read(cfg, path)) return 0;
+    if (hdb_config_read(cfg, path) == 0) return 0;
     resolve(cfg->uzdoom_exe, sizeof cfg->uzdoom_exe);
     resolve(cfg->iwad, sizeof cfg->iwad);
     resolve(cfg->halodoom_pk3, sizeof cfg->halodoom_pk3);

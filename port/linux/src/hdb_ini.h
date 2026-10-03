@@ -23,6 +23,12 @@ static void hdb_ini_trim(char* s) {
     while (e > s && isspace((unsigned char)e[-1])) *--e = 0;
 }
 
+/* keys and sections ignore letter case: sUZDoom, suzdoom and SUZDOOM alike */
+static int hdb_ini_same(const char* a, const char* b) {
+    while (*a && tolower((unsigned char)*a) == tolower((unsigned char)*b)) { ++a; ++b; }
+    return tolower((unsigned char)*a) == tolower((unsigned char)*b);
+}
+
 static void hdb_ini_copy(char* dst, size_t n, const char* src) {
     strncpy(dst, src, n - 1);
     dst[n - 1] = 0;
@@ -59,9 +65,22 @@ static void hdb_config_defaults(hdb_config* c) {
 static int hdb_config_read(hdb_config* c, const char* path) {
     char line[1024], section[64] = "";
     FILE* f = fopen(path, "r");
+    int first = 1;
     if (!f) return 0;
     while (fgets(line, sizeof line, f)) {
         char *eq, *semi, *key, *val;
+        if (first) {
+            first = 0;
+            /* Notepad's "UTF-8 with BOM": skip the mark */
+            if ((unsigned char)line[0] == 0xEF && (unsigned char)line[1] == 0xBB && (unsigned char)line[2] == 0xBF)
+                memmove(line, line + 3, strlen(line + 3) + 1);
+            /* UTF-16 ("Unicode" in Notepad) can't be read: say so */
+            else if (((unsigned char)line[0] == 0xFF && (unsigned char)line[1] == 0xFE) ||
+                     ((unsigned char)line[0] == 0xFE && (unsigned char)line[1] == 0xFF)) {
+                fclose(f);
+                return -1;
+            }
+        }
         semi = strchr(line, ';');
         if (semi) *semi = 0;
         hdb_ini_trim(line);
@@ -77,25 +96,25 @@ static int hdb_config_read(hdb_config* c, const char* path) {
         key = line; val = eq + 1;
         hdb_ini_trim(key); hdb_ini_trim(val);
 
-        if (!strcmp(section, "Doom")) {
-            if (!strcmp(key, "bStartDoom")) c->start_doom = atoi(val);
-            else if (!strcmp(key, "bShowDoomWindow")) c->doom_visible = atoi(val);
-            else if (!strcmp(key, "sUZDoom")) hdb_ini_copy(c->uzdoom_exe, sizeof c->uzdoom_exe, val);
-            else if (!strcmp(key, "sIWAD")) hdb_ini_copy(c->iwad, sizeof c->iwad, val);
-            else if (!strcmp(key, "sHaloDoom")) hdb_ini_copy(c->halodoom_pk3, sizeof c->halodoom_pk3, val);
-            else if (!strcmp(key, "sBridgePk3")) hdb_ini_copy(c->bridge_pk3, sizeof c->bridge_pk3, val);
-            else if (!strcmp(key, "sDoomConfig")) hdb_ini_copy(c->doom_config, sizeof c->doom_config, val);
-            else if (!strcmp(key, "sExtraArgs")) hdb_ini_copy(c->extra_args, sizeof c->extra_args, val);
-        } else if (!strcmp(section, "Scale")) {
-            if (!strcmp(key, "fDoomUnitsPerWU")) c->doom_units_per_wu = (float)atof(val);
-            else if (!strcmp(key, "fOutgoingDamage")) c->outgoing_damage_scale = (float)atof(val);
-            else if (!strcmp(key, "fIncomingDamage")) c->incoming_damage_scale = (float)atof(val);
-            else if (!strcmp(key, "fProxyRadiusWU")) c->proxy_radius_wu = (float)atof(val);
-        } else if (!strcmp(section, "Overlay")) {
-            if (!strcmp(key, "sKeyRGB")) c->key_rgb = (uint32_t)strtoul(val, NULL, 16);
-            else if (!strcmp(key, "iKeyTolerance")) c->key_tolerance = (uint32_t)atoi(val);
-        } else if (!strcmp(section, "Input")) {
-            if (!strcmp(key, "sHaloKeys")) {
+        if (hdb_ini_same(section, "Doom")) {
+            if (hdb_ini_same(key, "bStartDoom")) c->start_doom = atoi(val);
+            else if (hdb_ini_same(key, "bShowDoomWindow")) c->doom_visible = atoi(val);
+            else if (hdb_ini_same(key, "sUZDoom")) hdb_ini_copy(c->uzdoom_exe, sizeof c->uzdoom_exe, val);
+            else if (hdb_ini_same(key, "sIWAD")) hdb_ini_copy(c->iwad, sizeof c->iwad, val);
+            else if (hdb_ini_same(key, "sHaloDoom")) hdb_ini_copy(c->halodoom_pk3, sizeof c->halodoom_pk3, val);
+            else if (hdb_ini_same(key, "sBridgePk3")) hdb_ini_copy(c->bridge_pk3, sizeof c->bridge_pk3, val);
+            else if (hdb_ini_same(key, "sDoomConfig")) hdb_ini_copy(c->doom_config, sizeof c->doom_config, val);
+            else if (hdb_ini_same(key, "sExtraArgs")) hdb_ini_copy(c->extra_args, sizeof c->extra_args, val);
+        } else if (hdb_ini_same(section, "Scale")) {
+            if (hdb_ini_same(key, "fDoomUnitsPerWU")) c->doom_units_per_wu = (float)atof(val);
+            else if (hdb_ini_same(key, "fOutgoingDamage")) c->outgoing_damage_scale = (float)atof(val);
+            else if (hdb_ini_same(key, "fIncomingDamage")) c->incoming_damage_scale = (float)atof(val);
+            else if (hdb_ini_same(key, "fProxyRadiusWU")) c->proxy_radius_wu = (float)atof(val);
+        } else if (hdb_ini_same(section, "Overlay")) {
+            if (hdb_ini_same(key, "sKeyRGB")) c->key_rgb = (uint32_t)strtoul(val, NULL, 16);
+            else if (hdb_ini_same(key, "iKeyTolerance")) c->key_tolerance = (uint32_t)atoi(val);
+        } else if (hdb_ini_same(section, "Input")) {
+            if (hdb_ini_same(key, "sHaloKeys")) {
                 char* p = val;
                 c->halo_key_count = 0;
                 while (*p && c->halo_key_count < HDB_MAX_RESERVED_KEYS) {
@@ -106,8 +125,8 @@ static int hdb_config_read(hdb_config* c, const char* path) {
                     p = end;
                 }
             }
-        } else if (!strcmp(section, "DamageTypes")) {
-            if (!strcmp(key, "default"))
+        } else if (hdb_ini_same(section, "DamageTypes")) {
+            if (hdb_ini_same(key, "default"))
                 hdb_ini_copy(c->default_damage_effect_path, sizeof c->default_damage_effect_path, val);
             else if (c->damage_type_count < HDB_MAX_DAMAGE_TYPES) {
                 int i = c->damage_type_count++;
