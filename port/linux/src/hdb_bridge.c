@@ -62,6 +62,7 @@ static struct
 
 	hdb_vec3 motion;    /* this tick's Doom displacement, world units */
 	int have_motion;
+	int motion_tics;     /* Doom tics in it: one, sometimes two */
 	int starved;
 	float yaw, pitch;
 	int crouch;
@@ -532,6 +533,7 @@ void hdb_bridge_tick(void)
 	if (count)
 	{
 		B.motion = sum;
+		B.motion_tics = count;
 		B.have_motion = 1;
 		B.starved = 0;
 	}
@@ -632,13 +634,28 @@ int hdb_bridge_aim_override(float *yaw, float *pitch, int *crouch, float *forwar
 	return 1;
 }
 
-int hdb_bridge_motion_override(long biped_index, float velocity[3])
+int hdb_bridge_motion_override(long biped_index, float velocity[3], float halo_gravity)
 {
+	/* Doom's gravity at its default (a Doom unit per tic, per tic), in world
+	units per Halo tick per tick */
+	const float doom_tics_per_tick = 35.f / 30.f;
+	float doom_gravity, vertical;
+
 	if (!B.ready || !B.driving || !B.have_motion || biped_index != B.player || biped_index == -1)
 		return 0;
 	velocity[0] = B.motion.x;
 	velocity[1] = B.motion.y;
-	velocity[2] = B.motion.z;
+
+	/* Up and down: Doom's rate for one tic (two tics' worth would make one
+	jump twice another), and in Halo's gravity rather than Doom's, several
+	times stronger: the biped falls by Halo's own physics (bipeds.c), and a
+	jump keeps the height it has in Doom. With Doom's gravity, a step off a
+	ledge landed hard enough for Halo's falling damage to kill. */
+	vertical = B.motion.z / (float)(B.motion_tics > 0 ? B.motion_tics : 1) * doom_tics_per_tick;
+	doom_gravity = doom_tics_per_tick * doom_tics_per_tick / (B.config.doom_units_per_wu > 0.f ? B.config.doom_units_per_wu : 80.f);
+	if (halo_gravity > 0.f)
+		vertical *= sqrtf(halo_gravity / doom_gravity);
+	velocity[2] = vertical;
 	return 1;
 }
 
@@ -652,19 +669,28 @@ int hdb_bridge_player_damaged(long victim_index, float amount, float const sourc
 	from.y = source[1];
 	from.z = source[2];
 	push_halo_event(HDB_EV_PLAYER_DAMAGED, amount * B.config.incoming_damage_scale, (uint32_t)damage_effect_index, &from);
+	if (amount * B.config.incoming_damage_scale >= 40.f)
+		hdb_os_log("heavy damage to the player: %.0f from %s", amount * B.config.incoming_damage_scale,
+			hdb_game_tag_name(damage_effect_index));
 	return 1;
 }
 
 void hdb_bridge_checkpoint_saved(void)
 {
 	if (B.ready)
+	{
+		hdb_os_log("checkpoint saved: Doom saves too");
 		push_halo_event(HDB_EV_CHECKPOINT_SAVED, 0.f, 0, NULL);
+	}
 }
 
 void hdb_bridge_reverted(void)
 {
 	if (B.ready)
+	{
+		hdb_os_log("reverted to the checkpoint: Doom loads its save");
 		push_halo_event(HDB_EV_REVERTED, 0.f, 0, NULL);
+	}
 }
 
 /* ---------- input (hdb_input_sdl.c) */

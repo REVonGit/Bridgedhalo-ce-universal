@@ -290,6 +290,13 @@ long hdb_game_damage_effect(char const *tag_path)
 	return index;
 }
 
+char const *hdb_game_tag_name(long tag_index)
+{
+	char const *name = tag_index != NONE ? tag_get_name(tag_index) : NULL;
+
+	return name ? name : "?";
+}
+
 void hdb_game_damage_object(long target, float amount, long damage_effect,
 	hdb_game_vec3 const *origin, hdb_game_vec3 const *direction)
 {

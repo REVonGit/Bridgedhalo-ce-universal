@@ -2560,14 +2560,17 @@ static void biped_update_physics(
 	/* the HaloDoom bridge: the player's biped moves as Halo Doom moved its
 	player this tick, against Halo's collision (port/linux/src/hdb_bridge.c) */
 	{
-		extern int hdb_bridge_motion_override(long biped_index, float velocity[3]);
+		extern int hdb_bridge_motion_override(long biped_index, float velocity[3], float halo_gravity);
 		float doom_velocity[3];
 
-		if (hdb_bridge_motion_override(physics->biped_index, doom_velocity))
+		if (hdb_bridge_motion_override(physics->biped_index, doom_velocity, global_gravity))
 		{
 			physics->new_velocity.i = doom_velocity[0];
 			physics->new_velocity.j = doom_velocity[1];
-			physics->new_velocity.k = doom_velocity[2];
+			/* in the air the biped falls as Halo's own do, and lands as
+			softly: Doom only sets off its jumps */
+			physics->new_velocity.k = TEST_FLAG(in_flags, _biped_physics_in_airborne_bit) ?
+				physics->velocity.k - global_gravity : doom_velocity[2];
 			/* on the ground and not jumping: follow the slope and keep
 			pressed to it, as Halo's own ground movement does */
 			if (!TEST_FLAG(in_flags, _biped_physics_in_airborne_bit) &&
