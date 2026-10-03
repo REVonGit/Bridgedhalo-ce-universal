@@ -60,7 +60,12 @@ def updater_defines(release: bool) -> str:
     if not number.isdigit():
         number = "0"
     flavor = "release" if release else "debug"
-    return f'-DHALO_BUILD_NUMBER={number} -DHALO_BUILD_FLAVOR=\\"{flavor}\\"'
+    defines = f'-DHALO_BUILD_NUMBER={number} -DHALO_BUILD_FLAVOR=\\"{flavor}\\"'
+    # a fork's builds update from the fork's releases (port/linux/src/updater.c)
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    if re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
+        defines += f' -DUPDATE_REPOSITORY=\\"{repository}\\"'
+    return defines
 
 WINDOWS_ABI_FLAGS = [
     "--target=i686-pc-windows-msvc",

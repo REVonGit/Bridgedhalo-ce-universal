@@ -46,7 +46,12 @@ update.h's: posix_update.c on Linux, win32_update.c on Windows.
 #define HALO_BUILD_FLAVOR "release"
 #endif
 
+/* the repository whose releases this build updates from: the one CI built
+it in (tools/*_build.py, from GITHUB_REPOSITORY), so a fork's builds update
+to the fork's own releases rather than to another project's */
+#ifndef UPDATE_REPOSITORY
 #define UPDATE_REPOSITORY "cybersecurity/halo-ce-universal"
+#endif
 #ifdef _WIN32
 #define UPDATE_PLATFORM "windows"
 #define PATH_SEPARATOR "\\"
