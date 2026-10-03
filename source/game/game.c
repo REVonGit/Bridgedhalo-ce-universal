@@ -317,6 +317,14 @@ void game_tick(
 	cheats_network_client_enforce();
 	remove_quitting_players_from_game();
 	game_allegiance_update();
+#ifndef HALO_ANDROID /* the HaloDoom bridge (port/linux/include/hdb_hooks.h) */
+	/* the HaloDoom bridge: Doom's movement and hits for this tick, before
+	units_update moves the bipeds (port/linux/src/hdb_bridge.c) */
+	{
+		extern void hdb_bridge_tick(void);
+		hdb_bridge_tick();
+	}
+#endif
 	units_update();
 	/* (the host's actors drive the host's units, which a client of the
 	distributed netcode has from the host: its own would fight the host's

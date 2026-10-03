@@ -295,6 +295,14 @@ void game_state_save(
 	main_stop_time();
 	game_state_globals.saved_game_valid = (game_state_write_to_file()!=FALSE);
 	main_start_time();
+#ifndef HALO_ANDROID /* the HaloDoom bridge (port/linux/include/hdb_hooks.h) */
+	/* Halo Doom saves its player with every checkpoint */
+	if (game_state_globals.saved_game_valid)
+	{
+		extern void hdb_bridge_checkpoint_saved(void);
+		hdb_bridge_checkpoint_saved();
+	}
+#endif
 
 	return;
 }
@@ -312,6 +320,13 @@ void game_state_revert(
 	game_state_call_before_load_procs();
 	game_state_read_from_file();
 	game_state_call_after_load_procs();
+#ifndef HALO_ANDROID /* the HaloDoom bridge (port/linux/include/hdb_hooks.h) */
+	/* ... and goes back to it with every revert */
+	{
+		extern void hdb_bridge_reverted(void);
+		hdb_bridge_reverted();
+	}
+#endif
 
 	return;
 }

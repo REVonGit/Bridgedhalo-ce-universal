@@ -2556,6 +2556,36 @@ static void biped_update_physics(
 		}
 	}
 
+#ifndef HALO_ANDROID /* the HaloDoom bridge (port/linux/include/hdb_hooks.h) */
+	/* the HaloDoom bridge: the player's biped moves as Halo Doom moved its
+	player this tick, against Halo's collision (port/linux/src/hdb_bridge.c) */
+	{
+		extern int hdb_bridge_motion_override(long biped_index, float velocity[3]);
+		float doom_velocity[3];
+
+		if (hdb_bridge_motion_override(physics->biped_index, doom_velocity))
+		{
+			physics->new_velocity.i = doom_velocity[0];
+			physics->new_velocity.j = doom_velocity[1];
+			physics->new_velocity.k = doom_velocity[2];
+			/* on the ground and not jumping: follow the slope and keep
+			pressed to it, as Halo's own ground movement does */
+			if (!TEST_FLAG(in_flags, _biped_physics_in_airborne_bit) &&
+				!TEST_FLAG(in_flags, _biped_physics_in_flying_bit) &&
+				doom_velocity[2] <= 0.f && physics->ground_plane.n.k > _real_epsilon)
+			{
+				real_vector3d const *n = &physics->ground_plane.n;
+
+				physics->new_velocity.k = -(physics->new_velocity.i * n->i + physics->new_velocity.j * n->j) / n->k;
+				physics->new_velocity.i -= n->i * (1.f / 128.f);
+				physics->new_velocity.j -= n->j * (1.f / 128.f);
+				physics->new_velocity.k -= n->k * (1.f / 128.f);
+			}
+			physics->out_flags &= ~FLAG(_biped_physics_out_slipping_bit);
+		}
+	}
+#endif
+
 	if (TEST_FLAG(physics->in_flags, _biped_physics_in_no_collision_bit))
 	{
 		collision_flags = 0;

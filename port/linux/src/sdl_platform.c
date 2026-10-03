@@ -15,6 +15,7 @@ and the debug keyboard that the game's console reads.
 #include "port_config.h"
 #include "p2p.h"
 #include "xiso.h"
+#include "hdb_hooks.h"
 
 #include <SDL3/SDL.h>
 #include <stdio.h>
@@ -427,6 +428,11 @@ BOOL platform_video_initialize(unsigned long width, unsigned long height)
 #ifndef HALO_ANDROID
 	platform_mouse_capture(TRUE);
 #endif
+#ifdef HALO_HDBRIDGE
+	/* the HaloDoom bridge (hdb_bridge.c): off without hdbridge.ini */
+	hdb_bridge_init();
+	atexit(hdb_bridge_shutdown);
+#endif
 	return TRUE;
 }
 
@@ -809,6 +815,11 @@ void platform_pump_events(void)
 	pthread_mutex_lock(&input_lock);
 	while (SDL_PollEvent(&event))
 	{
+#ifdef HALO_HDBRIDGE
+		/* keys and mouse that went to Halo Doom never reach controller 1 */
+		if (hdb_input_filter_sdl(&event))
+			continue;
+#endif
 		switch (event.type)
 		{
 		case SDL_EVENT_QUIT:

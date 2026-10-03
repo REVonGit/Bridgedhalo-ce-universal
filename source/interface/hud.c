@@ -1396,12 +1396,24 @@ void hud_draw_screen(
 				perspective != _director_perspective_scripted &&
 				player->unit_index != NONE)
 			{
-				hud_render_weapon_interface(player);
+#ifndef HALO_ANDROID /* the HaloDoom bridge (port/linux/include/hdb_hooks.h) */
+				/* Halo Doom's HUD replaces the weapon, shield/health and
+				damage pieces while it drives; prompts, waypoints and
+				messages stay Halo's */
+				extern int hdb_game_fp_weapon_and_hud_visible(void);
+				boolean halo_hud = hdb_game_fp_weapon_and_hud_visible();
+#else
+				boolean halo_hud = TRUE;
+#endif
+				if (halo_hud)
+					hud_render_weapon_interface(player);
 				hud_show_action_response(player_index);
 				hud_play_unit_sounds(player, hud_scripted_globals->show_hud);
-				hud_render_unit_interface(player);
+				if (halo_hud)
+					hud_render_unit_interface(player);
 				hud_render_nav_points(render.local_player_index);
-				hud_render_damage_indicators(render.local_player_index);
+				if (halo_hud)
+					hud_render_damage_indicators(render.local_player_index);
 			}
 			else
 			{

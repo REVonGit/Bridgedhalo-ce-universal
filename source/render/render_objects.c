@@ -354,6 +354,11 @@ void render_objects(
 	{
 		if (first_person_pass != rasterizer_debug_options.draw_first_person_weapon_first)
 		{
+#ifndef HALO_ANDROID /* the HaloDoom bridge (port/linux/include/hdb_hooks.h) */
+			/* Halo Doom draws its own weapon while it drives */
+			extern int hdb_game_fp_weapon_and_hud_visible(void);
+			if (hdb_game_fp_weapon_and_hud_visible())
+#endif
 			first_person_weapon_draw();
 		}
 		else

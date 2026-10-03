@@ -740,6 +740,34 @@ static void handle_one_player_input(
 			player_control_angle_step_ticks = 1.f;
 		}
 
+#ifndef HALO_ANDROID /* the HaloDoom bridge (port/linux/include/hdb_hooks.h) */
+		/* the HaloDoom bridge: Halo Doom aims, crouches and moves the player
+		(its motion reaches the biped in bipeds.c; the throttle here only
+		animates it) */
+		{
+			extern int hdb_bridge_aim_override(float *yaw, float *pitch, int *crouch, float *forward, float *left);
+			float yaw, pitch, forward, left;
+			int crouch;
+
+			if (local_player_index == 0 &&
+				!director_inhibited_facing(local_player_index) &&
+				hdb_bridge_aim_override(&yaw, &pitch, &crouch, &forward, &left))
+			{
+				while (yaw < 0.f)
+					yaw += _pi * 2.f;
+				while (yaw >= _pi * 2.f)
+					yaw -= _pi * 2.f;
+				player->desired_angles.yaw = yaw;
+				player->desired_angles.pitch = PIN(pitch, -DEGREES_TO_RADIANS(85.f), DEGREES_TO_RADIANS(85.f));
+				input.facing_delta.yaw = 0.f;
+				input.facing_delta.pitch = 0.f;
+				input.throttle.i = forward;
+				input.throttle.j = left;
+				SET_FLAG(input.unit_control_flags, _unit_control_crouch_modifier_bit, crouch != 0);
+			}
+		}
+#endif
+
 		if (unit->object.parent_object_index == NONE)
 		{
 			if (player_ui_autolevel_enabled(local_player_index) &&

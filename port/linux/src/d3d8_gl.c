@@ -21,6 +21,7 @@ Conventions carried over from the Xbox:
 - Vertex data is read from guest memory at draw time.
 */
 
+#include "hdb_hooks.h"
 #include "xgpu.h"
 #include "sdl_platform.h"
 #include "halo_ui_pointer.h"
@@ -3699,6 +3700,10 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 		/* row 0 of the render target is the top of the picture */
 		glBlitFramebuffer(0, 0, (GLint)back_buffer->target.gl_width, (GLint)back_buffer->target.gl_height,
 			x, y + height, x + width, y, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+#ifdef HALO_HDBRIDGE
+		/* Halo Doom's weapon and HUD over the picture (hdb_overlay_gl.c) */
+		hdb_overlay_draw(x, y, width, height);
+#endif
 		platform_video_swap();
 		xgpu_gl_state_invalidate();
 		xgpu_texture_cache_begin_frame();

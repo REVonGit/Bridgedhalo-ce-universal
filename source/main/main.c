@@ -3226,6 +3226,15 @@ void main_loop(
 			process_ui_widgets();
 			bink_playback_update();
 
+#ifndef HALO_ANDROID /* the HaloDoom bridge (port/linux/include/hdb_hooks.h) */
+			/* the HaloDoom bridge: who drives the player, Doom's aim, the
+			state Doom mirrors (port/linux/src/hdb_bridge.c) */
+			{
+				extern void hdb_bridge_frame(void);
+				hdb_bridge_frame();
+			}
+#endif
+
 			if ((!game_in_editor() && (input_key_is_down(_key_end) || input_key_is_down(_key_escape))) || editor_should_exit())
 			{
 				main_movie_stop();
