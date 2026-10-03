@@ -13,6 +13,9 @@ the pause menu, the action prompts and vehicles. Gamepads are not routed.
 
 #ifdef HALO_HDBRIDGE
 
+/* the Xbox SDK declarations first, as every platform unit has them: on
+Windows they keep SDL and gl.h from bringing in the Windows SDK */
+#include "platform.h"
 #include <SDL3/SDL.h>
 #include "hdb_bridge.h"
 

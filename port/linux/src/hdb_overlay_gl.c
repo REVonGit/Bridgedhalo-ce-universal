@@ -10,6 +10,9 @@
 
 #ifdef HALO_HDBRIDGE
 
+/* the Xbox SDK declarations first, as every platform unit has them: on
+Windows they keep SDL and gl.h from bringing in the Windows SDK */
+#include "platform.h"
 #include <SDL3/SDL.h>
 #include <string.h>
 #include "gl.h"        /* the port's GL types and constants, its APIENTRY handled */
