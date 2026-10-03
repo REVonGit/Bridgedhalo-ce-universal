@@ -38,7 +38,23 @@ APKS = {
 
 def run(command, cwd=ROOT):
     print("+", " ".join(str(part) for part in command), flush=True)
-    subprocess.run([str(part) for part in command], cwd=cwd, check=True)
+    # The output is passed through as it comes; when the command fails, its
+    # error lines (compiler, linker, ninja) are also gathered into one GitHub
+    # annotation, which the API can read without the full log.
+    process = subprocess.Popen([str(part) for part in command], cwd=cwd, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, text=True, errors="replace")
+    errors = []
+    for line in process.stdout:
+        sys.stdout.write(line)
+        lowered = line.lower()
+        if ("error" in lowered or line.startswith("FAILED:") or "undefined" in lowered) and len(errors) < 80:
+            errors.append(line.rstrip()[:400])
+    sys.stdout.flush()
+    if process.wait() != 0:
+        if errors:
+            message = "\n".join(errors).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            print(f"::error title=Build errors::{message}", flush=True)
+        raise subprocess.CalledProcessError(process.returncode, command)
 
 
 def main() -> int:
