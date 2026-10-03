@@ -33,11 +33,23 @@ typedef struct
 	hdb_game_vec3 point, normal;
 } hdb_ray_hit;
 
+/* a weapon or equipment lying loose in the world */
+typedef struct
+{
+	long handle;
+	hdb_game_vec3 pos;
+	unsigned long kind_hash;  /* FNV-1a of the lower-cased tag path */
+	float count;              /* a weapon's rounds (or charge, 0..100); 1 otherwise */
+	int is_weapon;
+} hdb_item_info;
+
 typedef void (*hdb_unit_fn)(long handle, void *context);
 
 /* game state */
 int hdb_game_in_progress(void);       /* a campaign map runs and local player 0 has a unit */
 int hdb_game_paused(void);            /* pause menu, console, main menu */
+int hdb_game_menu_open(void);         /* main menu or console (not a paused game clock) */
+void hdb_game_set_time_paused(int paused);   /* freezes the world, as Halo's pause does */
 int hdb_game_cinematic(void);
 char const *hdb_game_map_name(void);  /* e.g. levels\a10\a10, or 0 */
 long hdb_game_bsp_index(void);
@@ -52,6 +64,9 @@ int hdb_game_player_grounded(void);
 int hdb_game_player_in_water(void);
 int hdb_game_get_unit(long handle, hdb_unit_info *info);
 void hdb_game_for_each_unit(hdb_unit_fn fn, void *context);
+int hdb_game_get_item(long handle, hdb_item_info *info);   /* 0 if gone or carried */
+void hdb_game_for_each_item(hdb_unit_fn fn, void *context);
+int hdb_game_delete_item(long handle);                     /* 0 if gone or carried */
 
 /* presentation */
 void hdb_game_set_fp_weapon_and_hud_visible(int visible);
@@ -60,7 +75,7 @@ void hdb_game_set_fp_weapon_and_hud_visible(int visible);
 int hdb_game_ray_test(hdb_game_vec3 const *from, hdb_game_vec3 const *to, int include_objects,
 	long ignore_object, hdb_ray_hit *hit);
 long hdb_game_damage_effect(char const *tag_path);
-char const *hdb_game_tag_name(long tag_index);        /* "?" for none */   /* -1 if not in this map */
+char const *hdb_game_tag_name(long tag_index);        /* "?" for none */
 void hdb_game_damage_object(long target, float amount, long damage_effect,
 	hdb_game_vec3 const *origin, hdb_game_vec3 const *direction);
 void hdb_game_kill_player(void);

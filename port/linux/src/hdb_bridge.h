@@ -39,6 +39,8 @@ typedef struct
 	/* [Input] DirectInput-style scancodes that stay with Halo */
 	uint16_t halo_keys[HDB_MAX_RESERVED_KEYS];
 	int halo_key_count;
+	uint16_t both_keys[HDB_MAX_RESERVED_KEYS];   /* to Halo and Halo Doom alike */
+	int both_key_count;
 	/* [DamageTypes] Doom damage type name -> Halo damage_effect tag path */
 	char damage_type_name[HDB_MAX_DAMAGE_TYPES][64];
 	char damage_effect_path[HDB_MAX_DAMAGE_TYPES][128];

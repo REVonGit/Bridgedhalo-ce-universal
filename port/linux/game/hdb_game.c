@@ -24,6 +24,8 @@ Campaign only: the bridge stays out of multiplayer games.
 #include "units/units.h"
 #include "units/bipeds.h"
 #include "units/biped_definitions.h"
+#include "items/items.h"
+#include "items/weapons.h"
 #include "physics/collisions.h"
 #include "scenario/scenario.h"
 #include "structures/structure_bsp_definitions.h"
@@ -87,6 +89,16 @@ int hdb_game_in_progress(void)
 int hdb_game_paused(void)
 {
 	return main_menu_is_active() || console_is_active() || (game_in_progress() && game_time_get_paused());
+}
+
+int hdb_game_menu_open(void)
+{
+	return main_menu_is_active() || console_is_active();
+}
+
+void hdb_game_set_time_paused(int paused)
+{
+	game_time_set_paused(paused ? TRUE : FALSE);
 }
 
 int hdb_game_cinematic(void)
@@ -240,6 +252,54 @@ void hdb_game_for_each_unit(hdb_unit_fn fn, void *context)
 	object_iterator_new(&iterator, _object_mask_unit, 0);
 	while (object_iterator_next(&iterator))
 		fn(iterator.index, context);
+}
+
+/* ---------- items */
+
+int hdb_game_get_item(long handle, hdb_item_info *info)
+{
+	struct item_datum *item = (struct item_datum *)object_try_and_get_and_verify_type(handle,
+		_object_mask_weapon | _object_mask_equipment);
+	struct weapon_datum *weapon;
+
+	csmemset(info, 0, sizeof(*info));
+	if (!item || item->object.parent_object_index != NONE)
+		return FALSE;
+	info->handle = handle;
+	info->pos.x = item->object.position.x;
+	info->pos.y = item->object.position.y;
+	info->pos.z = item->object.position.z;
+	info->kind_hash = hash_lower(tag_get_name(item->definition_index));
+	info->count = 1.f;
+	weapon = weapon_try_and_get(handle);
+	if (weapon)
+	{
+		/* the magazine's rounds, or a plasma weapon's charge */
+		short rounds = weapon->weapon.magazines[0].rounds_total;
+
+		info->is_weapon = TRUE;
+		info->count = rounds > 0 ? (float)rounds : (1.f - weapon->weapon.age) * 100.f;
+	}
+	return TRUE;
+}
+
+void hdb_game_for_each_item(hdb_unit_fn fn, void *context)
+{
+	struct object_iterator iterator;
+
+	object_iterator_new(&iterator, _object_mask_weapon | _object_mask_equipment, 0);
+	while (object_iterator_next(&iterator))
+		fn(iterator.index, context);
+}
+
+int hdb_game_delete_item(long handle)
+{
+	hdb_item_info info;
+
+	if (!hdb_game_get_item(handle, &info))
+		return FALSE;
+	object_delete(handle);
+	return TRUE;
 }
 
 /* ---------- presentation */

@@ -304,7 +304,14 @@ static void network_player_log_idle_action(long player_index, unsigned long cont
 /* whether this machine decides pickups: not a client of the distributed
 netcode, whose players' weapons, grenades and power-ups are the host's
 (port/linux/game/network_distributed.c) */
+#ifndef HALO_ANDROID
+/* the HaloDoom bridge: while Doom drives the player, Halo Doom picks up
+Halo's weapons and equipment its own way (port/linux/src/hdb_bridge.c) */
+extern int hdb_bridge_pickups_are_dooms(void);
+#define players_decide_pickups() (!network_game_distributed_client() && !hdb_bridge_pickups_are_dooms())
+#else
 #define players_decide_pickups() (!network_game_distributed_client())
+#endif
 
 /* ---------- constants */
 

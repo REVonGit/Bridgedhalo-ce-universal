@@ -71,6 +71,8 @@ static struct
 	int have_picture;
 	int launch_pending;
 	int doom_seen;   /* 0 nothing yet, 1 talking, 2 ready: for the log */
+	int doom_menu;        /* UZDoom's menu or console is open while it drives */
+	int paused_for_doom;  /* we stopped Halo's clock for it */
 	uint64_t init_ms;
 
 	volatile long input_lock;
@@ -81,6 +83,13 @@ static struct
 static hdb_near near_units[HDB_MAX_CANDIDATES];
 static int near_count;
 static hdb_vec3 near_centre;
+
+/* loose weapons and equipment within this of the player go to Doom as items
+to pick up (Halo's own pickups are off while Doom drives: players.c) */
+#define HDB_ITEM_REACH_WU 4.f
+#define HDB_MAX_ITEMS 32
+static hdb_item_info near_items[HDB_MAX_ITEMS];
+static int near_item_count;
 
 /* ---------- helpers */
 
@@ -219,6 +228,8 @@ void hdb_bridge_shutdown(void)
 		return;
 	if (B.driving)
 		hdb_game_set_fp_weapon_and_hud_visible(1);
+	if (B.paused_for_doom)
+		hdb_game_set_time_paused(0);
 	hdb_os_kill_doom();
 	hdb_os_unmap_shared(B.shared);
 	B.shared = NULL;
@@ -352,6 +363,18 @@ static void collect_unit(long handle, void *context)
 	near_count++;
 }
 
+static void collect_item(long handle, void *context)
+{
+	hdb_item_info item;
+
+	(void)context;
+	if (near_item_count >= HDB_MAX_ITEMS || !hdb_game_get_item(handle, &item))
+		return;
+	if (distance2(to_vec3(item.pos), near_centre) > HDB_ITEM_REACH_WU * HDB_ITEM_REACH_WU)
+		return;
+	near_items[near_item_count++] = item;
+}
+
 static int by_distance(void const *a, void const *b)
 {
 	float x = ((hdb_near const *)a)->d2, y = ((hdb_near const *)b)->d2;
@@ -369,15 +392,18 @@ static void publish_state(uint32_t flags)
 	have_me = B.player != -1 && hdb_game_get_unit(B.player, &me);
 
 	near_count = 0;
+	near_item_count = 0;
 	if (have_me)
 	{
 		near_centre = to_vec3(me.pos);
 		hdb_game_for_each_unit(collect_unit, NULL);
-		if (near_count > HDB_MAX_PROXIES)
+		if (near_count > HDB_MAX_PROXIES - HDB_MAX_ITEMS)
 		{
 			qsort(near_units, (size_t)near_count, sizeof(near_units[0]), by_distance);
-			near_count = HDB_MAX_PROXIES;
+			near_count = HDB_MAX_PROXIES - HDB_MAX_ITEMS;
 		}
+		if (B.driving)
+			hdb_game_for_each_item(collect_item, NULL);
 	}
 
 	ground = me.pos.z;
@@ -405,7 +431,7 @@ static void publish_state(uint32_t flags)
 	s->fov_h = hdb_game_fov_horizontal();
 	s->view_w = B.picture_width;
 	s->view_h = B.picture_height;
-	s->proxy_count = (uint32_t)near_count;
+	s->proxy_count = (uint32_t)(near_count + near_item_count);
 	for (i = 0; i < near_count; i++)
 	{
 		hdb_unit_info const *u = &near_units[i].unit;
@@ -423,6 +449,21 @@ static void publish_state(uint32_t flags)
 		p->team = (uint32_t)u->team;
 		p->kind_hash = (uint32_t)u->kind_hash;
 		p->health_frac = u->health_frac;
+	}
+	for (i = 0; i < near_item_count; i++)
+	{
+		hdb_item_info const *item = &near_items[i];
+		hdb_proxy *p = &s->proxies[near_count + i];
+
+		memset(p, 0, sizeof(*p));
+		p->entity_id = (uint32_t)item->handle;
+		p->flags = HDB_PF_ITEM;
+		p->pos = to_vec3(item->pos);
+		p->radius = 0.15f;
+		p->height = 0.15f;
+		p->team = HDB_NONE;
+		p->kind_hash = (uint32_t)item->kind_hash;
+		p->health_frac = item->count;
 	}
 	HDB_SEQ_END(*s);
 }
@@ -473,7 +514,24 @@ void hdb_bridge_frame(void)
 	{
 		flags |= HDB_HS_LOADING;
 	}
-	if (hdb_game_paused()) flags |= HDB_HS_PAUSED;
+	{
+		/* UZDoom's menu or console (its own keys, 9 and 0 by default): Halo's
+		world waits, with Doom still driving and drawn, so the menu shows */
+		int doom_menu = doom_up && (B.shared->doom.flags & HDB_DS_MENU) != 0;
+
+		if (doom_menu && B.driving && !B.paused_for_doom && !hdb_game_paused())
+		{
+			hdb_game_set_time_paused(1);
+			B.paused_for_doom = 1;
+		}
+		else if (!doom_menu && B.paused_for_doom)
+		{
+			hdb_game_set_time_paused(0);
+			B.paused_for_doom = 0;
+		}
+		B.doom_menu = doom_menu && B.paused_for_doom;
+	}
+	if (B.paused_for_doom ? hdb_game_menu_open() : hdb_game_paused()) flags |= HDB_HS_PAUSED;
 	if (B.in_game && hdb_game_cinematic()) flags |= HDB_HS_CINEMATIC;
 
 	/* UZDoom quitting or crashing hands the player straight back */
@@ -613,6 +671,12 @@ void hdb_bridge_tick(void)
 		HDB_RING_POP(B.shared->doom_events, event, ok);
 		if (!ok)
 			break;
+		if (event.type == HDB_EV_DOOM_TOOK_ITEM)
+		{
+			/* Halo Doom picked up its version of it: Halo's goes */
+			hdb_game_delete_item((long)event.dtype_hash);
+			continue;
+		}
 		if (event.type == HDB_EV_DOOM_PLAYER_DIED && B.driving)
 		{
 			hdb_os_log("the Doom player died: so does the biped (Halo reverts as usual)");
@@ -655,6 +719,13 @@ int hdb_bridge_motion_override(long biped_index, float velocity[3])
 	velocity[1] = B.motion.y;
 	velocity[2] = B.motion.z;
 	return 1;
+}
+
+int hdb_bridge_pickups_are_dooms(void)
+{
+	/* Halo Doom picks up Halo's weapons and equipment in its own way (the
+	items go to it as proxies): Halo's player takes none itself */
+	return B.ready && B.driving;
 }
 
 int hdb_bridge_no_falling_damage(long biped_index)
@@ -714,15 +785,40 @@ void hdb_bridge_reverted(void)
 static int reserved(uint16_t scancode)
 {
 	int i;
+
+	/* UZDoom's menu or console takes every key (Esc closes it, letters
+	type), but fullscreen and the mouse release */
+	if (B.doom_menu)
+		return scancode == 0x57 || scancode == 0x58;
 	for (i = 0; i < B.config.halo_key_count; i++)
 		if (B.config.halo_keys[i] == scancode)
 			return 1;
 	return 0;
 }
 
+static int shared_key(uint16_t scancode)
+{
+	int i;
+	for (i = 0; i < B.config.both_key_count; i++)
+		if (B.config.both_keys[i] == scancode)
+			return 1;
+	return 0;
+}
+
 int hdb_bridge_key(uint16_t scancode, int down)
 {
-	if (!B.ready || reserved(scancode))
+	if (!B.ready)
+		return 0;
+	if (!B.doom_menu && shared_key(scancode))
+	{
+		/* both games (E: Halo's action, Halo Doom's use); Halo sees it too */
+		if (down && B.driving && held_find(scancode) < 0 && push_input(HDB_IN_KEY_DOWN, scancode, 0, 0))
+			held_add(scancode);
+		else if (!down && held_remove(scancode))
+			push_input(HDB_IN_KEY_UP, scancode, 0, 0);
+		return 0;
+	}
+	if (reserved(scancode))
 		return 0;
 	if (!down && held_remove(scancode))
 	{

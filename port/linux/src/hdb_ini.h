@@ -34,6 +34,19 @@ static void hdb_ini_copy(char* dst, size_t n, const char* src) {
     dst[n - 1] = 0;
 }
 
+/* a list of hex scancodes ("01 12 29"): how many it read */
+static int hdb_ini_keys(char* p, uint16_t* keys) {
+    int count = 0;
+    while (*p && count < HDB_MAX_RESERVED_KEYS) {
+        char* end;
+        unsigned long v = strtoul(p, &end, 16);
+        if (end == p) { ++p; continue; }
+        keys[count++] = (uint16_t)v;
+        p = end;
+    }
+    return count;
+}
+
 static void hdb_config_defaults(hdb_config* c) {
     memset(c, 0, sizeof *c);
     c->start_doom = 1;
@@ -58,6 +71,8 @@ static void hdb_config_defaults(hdb_config* c) {
         int i;
         for (i = 0; i < (int)(sizeof keys / sizeof keys[0]); ++i) c->halo_keys[i] = keys[i];
         c->halo_key_count = (int)(sizeof keys / sizeof keys[0]);
+        c->both_keys[0] = 0x12;   /* E: Halo's action (vehicles, switches), Halo Doom's use (weapon pickups) */
+        c->both_key_count = 1;
     }
 }
 
@@ -114,17 +129,10 @@ static int hdb_config_read(hdb_config* c, const char* path) {
             if (hdb_ini_same(key, "sKeyRGB")) c->key_rgb = (uint32_t)strtoul(val, NULL, 16);
             else if (hdb_ini_same(key, "iKeyTolerance")) c->key_tolerance = (uint32_t)atoi(val);
         } else if (hdb_ini_same(section, "Input")) {
-            if (hdb_ini_same(key, "sHaloKeys")) {
-                char* p = val;
-                c->halo_key_count = 0;
-                while (*p && c->halo_key_count < HDB_MAX_RESERVED_KEYS) {
-                    char* end;
-                    unsigned long v = strtoul(p, &end, 16);
-                    if (end == p) { ++p; continue; }
-                    c->halo_keys[c->halo_key_count++] = (uint16_t)v;
-                    p = end;
-                }
-            }
+            if (hdb_ini_same(key, "sHaloKeys"))
+                c->halo_key_count = hdb_ini_keys(val, c->halo_keys);
+            else if (hdb_ini_same(key, "sBothKeys"))
+                c->both_key_count = hdb_ini_keys(val, c->both_keys);
         } else if (hdb_ini_same(section, "DamageTypes")) {
             if (hdb_ini_same(key, "default"))
                 hdb_ini_copy(c->default_damage_effect_path, sizeof c->default_damage_effect_path, val);
