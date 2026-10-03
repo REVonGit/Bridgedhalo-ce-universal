@@ -21,6 +21,10 @@ then never starts, and every override below answers "not driving".
 
 #ifdef HALO_HDBRIDGE
 
+/* xinput_sdl.c: while Doom drives the player, Halo Doom reads the
+controllers itself (UZDoom), and Halo keeps only Start and Back */
+int hdb_bridge_driving(void);
+
 /* sdl_platform.c, once the window and GL context exist / at exit */
 void hdb_bridge_init(void);
 void hdb_bridge_shutdown(void);

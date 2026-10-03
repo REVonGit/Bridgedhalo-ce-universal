@@ -35,6 +35,7 @@ drive the controller.
 #include "platform.h"
 #include "sdl_platform.h"
 #include "port_config.h"
+#include "hdb_hooks.h"
 
 #include <SDL3/SDL.h>
 #include <math.h>
@@ -440,6 +441,25 @@ static void sdl_gamepad_state(SDL_Gamepad *gamepad, XINPUT_GAMEPAD *pad)
 	if (abs(value) > abs(pad->sThumbRY)) pad->sThumbRY = value;
 }
 
+#ifdef HALO_HDBRIDGE
+/* The HaloDoom bridge: while Doom drives the player the controller is Halo
+Doom's (UZDoom reads it itself: its triggers fire and zoom, its buttons
+reload, melee, throw...). Halo keeps Start (pause) and Back, as it keeps Esc
+and F1 on the keyboard. */
+static void bridged_gamepad_state(SDL_Gamepad *gamepad, XINPUT_GAMEPAD *pad)
+{
+	if (!hdb_bridge_driving())
+	{
+		sdl_gamepad_state(gamepad, pad);
+		return;
+	}
+	if (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_START))
+		pad->wButtons |= XINPUT_GAMEPAD_START;
+	if (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_BACK))
+		pad->wButtons |= XINPUT_GAMEPAD_BACK;
+}
+#endif
+
 /* ---------- XAPI */
 
 VOID WINAPI XInitDevices(DWORD preallocation_type_count, PXDEVICE_PREALLOC_TYPE preallocation_types)
@@ -546,7 +566,11 @@ DWORD WINAPI XInputGetState(HANDLE device, PXINPUT_STATE state)
 		if (!console_is_active())
 			keyboard_gamepad(&input, &state->Gamepad);
 		if (count > 0)
+#ifdef HALO_HDBRIDGE
+			bridged_gamepad_state(gamepads[0], &state->Gamepad);   /* player 1's pad only */
+#else
 			sdl_gamepad_state(gamepads[0], &state->Gamepad);
+#endif
 		test_input_gamepad(&state->Gamepad);
 		if (abs(state->Gamepad.sThumbRX) > STICK_AIMING_DEFLECTION ||
 			abs(state->Gamepad.sThumbRY) > STICK_AIMING_DEFLECTION)
