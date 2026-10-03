@@ -8,7 +8,7 @@ sources, so it sees the game exactly as they do.
 Campaign only: the bridge stays out of multiplayer games.
 */
 
-#include "hdb_hooks.h"
+#include "../include/hdb_hooks.h"
 
 #ifdef HALO_HDBRIDGE
 
@@ -32,7 +32,7 @@ Campaign only: the bridge stays out of multiplayer games.
 #include "interface/ui_widget.h"
 #include "main/console.h"
 #include "math/real_math.h"
-#include "hdb_game.h"
+#include "../include/hdb_game.h"
 
 extern long halo_screen_width(void);
 
