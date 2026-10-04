@@ -56,6 +56,7 @@ static struct
 	long damage_effects[HDB_MAX_DAMAGE_TYPES];
 	uint32_t damage_hashes[HDB_MAX_DAMAGE_TYPES];
 	long default_damage_effect;
+	long explosion_damage_effect;   /* any other explosion of Halo Doom's */
 
 	uint32_t last_doom_heartbeat;
 	uint64_t last_doom_change_ms;
@@ -75,6 +76,8 @@ static struct
 	float sent_shields, sent_body;   /* the player's vitality as Doom last heard it (-1: resend) */
 	int player_was_dead;
 	char loadout_map[64];            /* the level whose starting loadout Doom has */
+	float doom_zoom;                 /* Halo Doom's view magnification (1: none) */
+	struct { long unit; uint32_t until_tick; } stuck[16];   /* units with a Doom grenade stuck to them */
 	int paused_for_doom;  /* we stopped Halo's clock for it */
 	uint64_t init_ms;
 
@@ -293,6 +296,7 @@ static void set_driving(int on)
 		return;
 	B.driving = on;
 	B.sent_shields = B.sent_body = -1.f;
+	B.doom_zoom = 1.f;
 	hdb_game_set_fp_weapon_and_hud_visible(!on);
 	if (!on)
 	{
@@ -311,12 +315,23 @@ static void resolve_damage_effects(void)
 		? hdb_game_damage_effect(B.config.default_damage_effect_path) : -1;
 	if (B.config.default_damage_effect_path[0] && B.default_damage_effect == -1)
 		hdb_os_log("damage effect not in this map: %s", B.config.default_damage_effect_path);
+	{
+		/* Halo's explosions this map has, for Halo Doom's other ones */
+		static char const *const explosions[] =
+		{
+			"weapons\\frag grenade\\explosion",
+			"weapons\\plasma grenade\\explosion",
+			"weapons\\rocket launcher\\explosion",
+		};
+		B.explosion_damage_effect = -1;
+		for (i = 0; i < (int)(sizeof(explosions) / sizeof(explosions[0])) && B.explosion_damage_effect == -1; i++)
+			B.explosion_damage_effect = hdb_game_damage_effect_exact(explosions[i]);
+	}
 	for (i = 0; i < B.config.damage_type_count; i++)
 	{
 		B.damage_hashes[i] = hdb_fnv1a_lower(B.config.damage_type_name[i]);
-		B.damage_effects[i] = hdb_game_damage_effect(B.config.damage_effect_path[i]);
-		if (B.damage_effects[i] == -1)
-			hdb_os_log("damage effect not in this map: %s", B.config.damage_effect_path[i]);
+		/* a type whose tag this map lacks falls back (effect_for) */
+		B.damage_effects[i] = hdb_game_damage_effect_exact(B.config.damage_effect_path[i]);
 	}
 }
 
@@ -558,13 +573,16 @@ void hdb_bridge_frame(void)
 
 /* ---------- every tick */
 
-static long effect_for(uint32_t damage_type)
+static long effect_for(uint32_t damage_type, uint32_t flags)
 {
 	int i;
 
 	for (i = 0; i < B.config.damage_type_count; i++)
 		if (B.damage_hashes[i] == damage_type && B.damage_effects[i] != -1)
 			return B.damage_effects[i];
+	/* an explosion of another type: Halo's frag grenade's, for its push */
+	if ((flags & HDB_DF_EXPLOSION) && B.explosion_damage_effect != -1)
+		return B.explosion_damage_effect;
 	return B.default_damage_effect;
 }
 
@@ -705,7 +723,7 @@ void hdb_bridge_tick(void)
 			hdb_game_vec3 origin = to_game_vec3(damage.origin), direction = to_game_vec3(damage.dir);
 
 			hdb_game_damage_object((long)damage.target_id, damage.amount * B.config.outgoing_damage_scale,
-				effect_for(damage.dtype_hash), &origin, &direction);
+				effect_for(damage.dtype_hash, damage.flags), &origin, &direction);
 			B.hits_dealt++;
 		}
 	}
@@ -747,6 +765,29 @@ void hdb_bridge_tick(void)
 		HDB_RING_POP(B.shared->doom_events, event, ok);
 		if (!ok)
 			break;
+		if (event.type == HDB_EV_DOOM_ZOOM)
+		{
+			float zoom = (float)event.dtype_hash / 1000.f;
+			B.doom_zoom = zoom < 1.f ? 1.f : zoom > 30.f ? 30.f : zoom;
+			continue;
+		}
+		if (event.type == HDB_EV_DOOM_STUCK)
+		{
+			/* held a few ticks; Doom says it again every tic while stuck */
+			int i, free_slot = -1;
+			for (i = 0; i < 16; i++)
+			{
+				if (B.stuck[i].unit == (long)event.dtype_hash) break;
+				if (free_slot < 0 && (B.stuck[i].until_tick < B.tick || !B.stuck[i].unit)) free_slot = i;
+			}
+			if (i == 16) i = free_slot;
+			if (i >= 0)
+			{
+				B.stuck[i].unit = (long)event.dtype_hash;
+				B.stuck[i].until_tick = B.tick + 3;
+			}
+			continue;
+		}
 		if (event.type == HDB_EV_DOOM_TOOK_ITEM)
 		{
 			/* Halo Doom picked up its version of it: Halo's goes */
@@ -795,6 +836,26 @@ int hdb_bridge_motion_override(long biped_index, float velocity[3])
 	velocity[1] = B.motion.y;
 	velocity[2] = B.motion.z;
 	return 1;
+}
+
+float hdb_bridge_zoom(void)
+{
+	/* Halo Doom's zoom (its scope), for Halo's first-person camera */
+	return B.ready && B.driving && B.doom_zoom > 1.f ? B.doom_zoom : 1.f;
+}
+
+long hdb_bridge_stuck_grenade_source(long unit_index)
+{
+	/* a Halo Doom grenade stuck to this unit: the AI reacts as to a Halo
+	one stuck to it (ai/actors.c), the player being the one who threw it */
+	int i;
+
+	if (!B.ready || B.player == -1)
+		return -1;
+	for (i = 0; i < 16; i++)
+		if (B.stuck[i].unit == unit_index && B.stuck[i].until_tick >= B.tick)
+			return B.player;
+	return -1;
 }
 
 int hdb_bridge_pickups_are_dooms(void)

@@ -1811,6 +1811,17 @@ static void actor_input_update(
 				threat_index = threat->object.next_object_index;
 			}
 		}
+#ifndef HALO_ANDROID /* the HaloDoom bridge (port/linux/include/hdb_hooks.h) */
+		if (actor->input.delayed_attached_projectile_index == NONE)
+		{
+			/* a Halo Doom plasma grenade stuck to it: as a Halo one */
+			extern long hdb_bridge_stuck_grenade_source(long unit_index);
+			long source = hdb_bridge_stuck_grenade_source(actor->meta.unit_index);
+
+			if (source != NONE)
+				actor->input.delayed_attached_projectile_index = source;
+		}
+#endif
 
 		actor->input.in_midair = FALSE;
 		actor->input.pathfinding_surface_index = NONE;

@@ -144,6 +144,16 @@ void first_person_camera_update(
 	player_control_get_facing_direction(action->local_player_index, &facing_direction);
 	first_person_camera_for_unit_and_vector(unit_index, &facing_direction, &result->command);
 	result->command.field_of_view = player_control_get_field_of_view(action->local_player_index);
+#ifndef HALO_ANDROID /* the HaloDoom bridge (port/linux/include/hdb_hooks.h) */
+	{
+		/* Halo Doom's zoom: the camera narrows as its scope magnifies */
+		extern float hdb_bridge_zoom(void);
+		real zoom = hdb_bridge_zoom();
+
+		if (zoom > 1.001f)
+			result->command.field_of_view = 2.f * arctangent(tangent(0.5f * result->command.field_of_view), zoom);
+	}
+#endif
 	if (camera->field_of_view != result->command.field_of_view)
 	{
 		result->transition_time = 0.18f;

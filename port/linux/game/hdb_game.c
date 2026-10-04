@@ -389,6 +389,11 @@ int hdb_game_ray_test(hdb_game_vec3 const *from, hdb_game_vec3 const *to, int in
 	return TRUE;
 }
 
+long hdb_game_damage_effect_exact(char const *tag_path)
+{
+	return tag_path && tag_path[0] ? tag_loaded(DAMAGE_EFFECT_DEFINITION_TAG, tag_path) : NONE;
+}
+
 long hdb_game_damage_effect(char const *tag_path)
 {
 	/* the campaign's own bullets, for when hdbridge.ini names none or a

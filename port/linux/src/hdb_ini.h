@@ -73,6 +73,24 @@ static void hdb_config_defaults(hdb_config* c) {
         c->halo_key_count = (int)(sizeof keys / sizeof keys[0]);
         c->both_keys[0] = 0x12;   /* E: Halo's action (vehicles, switches), Halo Doom's use (weapon pickups) */
         c->both_key_count = 1;
+        /* Halo Doom's damage types with a Halo equivalent: its explosions
+           as Halo's own, so they throw what they hit as Halo's do (the
+           effect's acceleration), and its plasma as Halo's (plasma against
+           shields). [DamageTypes] in hdbridge.ini can change or add to these. */
+        {
+            static const char* const types[][2] = {
+                { "Explosive",       "weapons\\frag grenade\\explosion" },
+                { "PlasmaExplosion", "weapons\\plasma grenade\\explosion" },
+                { "Rocket",          "weapons\\rocket launcher\\explosion" },
+                { "Plasma",          "weapons\\plasma rifle\\bolt" },
+            };
+            int t;
+            for (t = 0; t < (int)(sizeof types / sizeof types[0]); ++t) {
+                hdb_ini_copy(c->damage_type_name[t], sizeof c->damage_type_name[t], types[t][0]);
+                hdb_ini_copy(c->damage_effect_path[t], sizeof c->damage_effect_path[t], types[t][1]);
+            }
+            c->damage_type_count = t;
+        }
     }
 }
 
@@ -136,8 +154,15 @@ static int hdb_config_read(hdb_config* c, const char* path) {
         } else if (hdb_ini_same(section, "DamageTypes")) {
             if (hdb_ini_same(key, "default"))
                 hdb_ini_copy(c->default_damage_effect_path, sizeof c->default_damage_effect_path, val);
-            else if (c->damage_type_count < HDB_MAX_DAMAGE_TYPES) {
-                int i = c->damage_type_count++;
+            else {
+                /* a type named again (one of the defaults) takes the new tag */
+                int i;
+                for (i = 0; i < c->damage_type_count; ++i)
+                    if (hdb_ini_same(c->damage_type_name[i], key)) break;
+                if (i == c->damage_type_count) {
+                    if (c->damage_type_count >= HDB_MAX_DAMAGE_TYPES) continue;
+                    c->damage_type_count++;
+                }
                 hdb_ini_copy(c->damage_type_name[i], sizeof c->damage_type_name[i], key);
                 hdb_ini_copy(c->damage_effect_path[i], sizeof c->damage_effect_path[i], val);
             }

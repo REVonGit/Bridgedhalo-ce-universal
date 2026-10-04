@@ -48,6 +48,10 @@ int hdb_bridge_motion_override(long biped_index, float velocity[3]);
 /* units/bipeds.c, landing: nonzero for the biped Doom drives (Halo Doom has
 no falling damage) */
 int hdb_bridge_no_falling_damage(long biped_index);
+/* camera/first_person_camera.c: Halo Doom's zoom for the camera (1: none) */
+float hdb_bridge_zoom(void);
+/* ai/actors.c: what threw a Halo Doom grenade stuck to this unit, or -1 */
+long hdb_bridge_stuck_grenade_source(long unit_index);
 
 /* damage.c, object_cause_damage: returns 1 when the victim is the player's
 unit and the damage went to Doom instead (Doom owns the player's shields

@@ -86,7 +86,8 @@ void hdb_game_set_fp_weapon_and_hud_visible(int visible);
 /* world */
 int hdb_game_ray_test(hdb_game_vec3 const *from, hdb_game_vec3 const *to, int include_objects,
 	long ignore_object, hdb_ray_hit *hit);
-long hdb_game_damage_effect(char const *tag_path);
+long hdb_game_damage_effect(char const *tag_path);         /* or the campaign's bullets */
+long hdb_game_damage_effect_exact(char const *tag_path);   /* -1 if not in this map */
 char const *hdb_game_tag_name(long tag_index);        /* "?" for none */
 void hdb_game_damage_object(long target, float amount, long damage_effect,
 	hdb_game_vec3 const *origin, hdb_game_vec3 const *direction);
