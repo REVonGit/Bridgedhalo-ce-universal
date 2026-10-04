@@ -59,6 +59,8 @@ int hdb_os_doom_exited(long *exit_code);           /* 1 once the UZDoom it start
 uint32_t hdb_os_pid(void);
 uint64_t hdb_os_ms(void);
 void hdb_os_log(char const *format, ...);
+void hdb_os_file_path(char const *name, char *path, size_t size);   /* beside hdbridge.log */
+int hdb_bridge_overlay_hidden(void);                              /* F10 */
 
 /* the core, for the overlay and the input filter (hdb_bridge.c) */
 hdb_shared *hdb_bridge_shared(void);

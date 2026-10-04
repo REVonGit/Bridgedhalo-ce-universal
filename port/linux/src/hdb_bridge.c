@@ -22,6 +22,7 @@ hdb_game.h for the game.
 #ifdef HALO_HDBRIDGE
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "hdb_bridge.h"
@@ -935,10 +936,90 @@ static int shared_key(uint16_t scancode)
 	return 0;
 }
 
+/* ---------- diagnostics: F9 saves UZDoom's picture, F10 hides it */
+
+static int overlay_hidden;
+
+int hdb_bridge_overlay_hidden(void) { return overlay_hidden; }
+
+static void write_bmp(char const *name, uint8_t const *bgra, uint32_t w, uint32_t h, int alpha_only)
+{
+	char path[HDB_PATH_MAX];
+	uint8_t header[54];
+	uint32_t x, y, size = w * h * 4;
+	FILE *f;
+
+	hdb_os_file_path(name, path, sizeof(path));
+	f = fopen(path, "wb");
+	if (!f)
+		return;
+	memset(header, 0, sizeof(header));
+	header[0] = 'B'; header[1] = 'M';
+	*(uint32_t *)(header + 2) = 54 + size;
+	*(uint32_t *)(header + 10) = 54;
+	*(uint32_t *)(header + 14) = 40;
+	*(int32_t *)(header + 18) = (int32_t)w;
+	*(int32_t *)(header + 22) = -(int32_t)h;   /* rows from the top */
+	*(uint16_t *)(header + 26) = 1;
+	*(uint16_t *)(header + 28) = 32;
+	*(uint32_t *)(header + 34) = size;
+	fwrite(header, 1, sizeof(header), f);
+	for (y = 0; y < h; y++)
+	{
+		for (x = 0; x < w; x++)
+		{
+			uint8_t const *p = bgra + (y * w + x) * 4;
+			uint8_t out[4];
+			if (alpha_only)
+			{
+				out[0] = out[1] = out[2] = p[3];
+			}
+			else
+			{
+				/* over a checkerboard, so see-through shows */
+				int light = ((x / 32) + (y / 32)) & 1;
+				uint8_t bg[3] = { light ? 200 : 70, light ? 160 : 110, light ? 120 : 70 };
+				int c;
+				for (c = 0; c < 3; c++)
+					out[c] = (uint8_t)((p[c] * p[3] + bg[c] * (255 - p[3])) / 255);
+			}
+			out[3] = 255;
+			fwrite(out, 1, 4, f);
+		}
+	}
+	fclose(f);
+}
+
+static void save_overlay(void)
+{
+	hdb_overlay *o = &B.shared->overlay;
+	uint32_t idx = o->front;
+
+	if (idx >= HDB_OVERLAY_BUFFERS || !o->width[idx] || !o->height[idx])
+	{
+		hdb_os_log("F9: no picture from UZDoom yet");
+		return;
+	}
+	write_bmp("hdb_overlay.bmp", o->pixels[idx], o->width[idx], o->height[idx], 0);
+	write_bmp("hdb_overlay_alpha.bmp", o->pixels[idx], o->width[idx], o->height[idx], 1);
+	hdb_os_log("F9: UZDoom's picture saved: hdb_overlay.bmp (over a checkerboard), hdb_overlay_alpha.bmp (how solid)");
+}
+
 int hdb_bridge_key(uint16_t scancode, int down)
 {
 	if (!B.ready)
 		return 0;
+	if ((scancode == 0x43 || scancode == 0x44) && !B.doom_menu)
+	{
+		if (down && scancode == 0x43)
+			save_overlay();
+		else if (down)
+		{
+			overlay_hidden = !overlay_hidden;
+			hdb_os_log("F10: UZDoom's picture %s", overlay_hidden ? "hidden" : "shown");
+		}
+		return 1;
+	}
 	if (!B.doom_menu && shared_key(scancode))
 	{
 		/* both games (E: Halo's action, Halo Doom's use); Halo sees it too */

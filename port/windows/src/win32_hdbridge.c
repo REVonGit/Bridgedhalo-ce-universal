@@ -81,6 +81,10 @@ static void find_elsewhere(const char* setting, char* path, size_t n) {
     }
 }
 
+void hdb_os_file_path(const char* name, char* path, size_t size) {
+    snprintf(path, size, "%s\\%s", exe_dir(), name);
+}
+
 int hdb_os_load_config(hdb_config* cfg) {
     char path[HDB_PATH_MAX];
     int read;

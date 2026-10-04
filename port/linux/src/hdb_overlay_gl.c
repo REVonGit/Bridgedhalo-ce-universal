@@ -196,7 +196,7 @@ void hdb_overlay_draw(int x, int y, int w, int h) {
     GLboolean blend, depth, cull, scissor, stencil, srgb, cmask[4];
 
     hdb_bridge_set_picture_size(w, h);
-    if (!shm || !hdb_bridge_driving() || w <= 0 || h <= 0) return;
+    if (!shm || !hdb_bridge_driving() || hdb_bridge_overlay_hidden() || w <= 0 || h <= 0) return;
     if (!init_gl()) return;
 
     /* --- save ---------------------------------------------------- */

@@ -115,6 +115,10 @@ int hdb_os_process_alive(uint32_t pid) {
     return pid && kill((pid_t)pid, 0) == 0;
 }
 
+void hdb_os_file_path(const char* name, char* path, size_t size) {
+    snprintf(path, size, "%s/%s", exe_dir(), name);
+}
+
 int hdb_os_launch_doom(const hdb_config* cfg, uint32_t view_w, uint32_t view_h) {
     char w[16], h[16];
     const char* argv[32];   /* 20 fixed + up to 11 extra + NULL */
